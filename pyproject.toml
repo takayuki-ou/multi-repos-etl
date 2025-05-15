@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "github-pr-da"
+version = "0.1.0"
+authors = [
+  { name="takayuki-ou", email="xxx@xxx.com" },
+]
+description = "GitHub PR Analysis System"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "requests>=2.31.0",
+    "python-dotenv>=1.0.0",
+    "pyyaml>=6.0.1",
+    "sqlalchemy>=2.0.0",
+    "psycopg2-binary>=2.9.9",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.4.0",
+    "pytest-mock>=3.11.1",
+    "pytest-asyncio>=0.23.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = [
+  ".",
+  "src"
+]
+testpaths = [
+    "tests",
+]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
