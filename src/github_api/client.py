@@ -5,7 +5,7 @@ APIレート制限のハンドリング、ページネーション処理を担�
 import requests
 import time
 import logging
-from typing import Dict, List, Optional, Any, Generator
+from typing import Dict, List, Optional, Generator, Callable, Any
 from datetime import datetime
 from src.config.settings import Settings
 
@@ -45,7 +45,7 @@ class GitHubAPIClient:
             logger.warning(f"レート制限に達しました。{wait_time:.1f}秒待機します。")
             time.sleep(wait_time)
 
-    def _make_request(self, method: str, endpoint: str, params: Optional[Dict] = None) -> requests.Response:
+    def _make_request(self, method: str, endpoint: str, params: Optional[Dict[str, str]] = None) -> requests.Response:
         """APIリクエストの送信"""
         url = f"{self.BASE_URL}/{endpoint}"
         try:
@@ -65,26 +65,26 @@ class GitHubAPIClient:
             logger.error(f"APIリクエストエラー: {e}")
             raise
 
-    def _process_repositories(self, func: callable, owner: Optional[str] = None, repo: Optional[str] = None, **kwargs) -> List[Dict]:
+    def _process_repositories(self, func: Callable[..., List[Dict[str, Any]]], owner: Optional[str] = None, repo: Optional[str] = None, **kwargs: Any) -> List[Dict[str, Any]]:
         """リポジトリ処理の共通ロジック
-        
+
         Args:
             func: 各リポジトリに対して実行する関数
             owner: リポジトリのオーナー（オプション）
             repo: リポジトリ名（オプション）
             **kwargs: 関数に渡す追加の引数
-        
+
         Returns:
-            List[Dict]: 処理結果のリスト
+            List[Dict[str, Any]]: 処理結果のリスト
         """
-        results = []
-        
+        results: List[Dict[str, Any]] = []
+
         # 取得対象のリポジトリリストを決定
         target_repos = [f"{owner}/{repo}"] if owner and repo else self.repositories
-        
+
         for repo_full_name in target_repos:
             try:
-                result = func(repo_full_name, **kwargs)
+                result: List[Dict[str, Any]] = func(repo_full_name, **kwargs)
                 results.extend(result)
             except requests.exceptions.RequestException as e:
                 logger.error(f"リポジトリ {repo_full_name} の処理に失敗しました: {e}")
@@ -92,10 +92,10 @@ class GitHubAPIClient:
                     raise
                 # エラーが発生しても処理を継続
                 continue
-        
+
         return results
 
-    def get_pull_requests(self, owner: Optional[str] = None, repo: Optional[str] = None, since: Optional[str] = None) -> List[Dict]:
+    def get_pull_requests(self, owner: Optional[str] = None, repo: Optional[str] = None, since: Optional[str] = None) -> List[Dict[str, Any]]:
         """プルリクエストの取得"""
         return self._process_repositories(
             self._get_pull_requests_for_repo,
@@ -104,7 +104,7 @@ class GitHubAPIClient:
             since=since
         )
 
-    def _get_pull_requests_for_repo(self, repo_full_name: str, since: Optional[str] = None) -> List[Dict]:
+    def _get_pull_requests_for_repo(self, repo_full_name: str, since: Optional[str] = None) -> List[Dict[str, Any]]:
         """特定のリポジトリのプルリクエストを取得"""
         endpoint = f"repos/{repo_full_name}/pulls"
         params = {
@@ -114,12 +114,12 @@ class GitHubAPIClient:
         if since:
             params["since"] = since
 
-        prs = []
+        prs: List[Dict[str, Any]] = []
         page = 1
         while True:
             params["page"] = page
             response = self._make_request("GET", endpoint, params)
-            current_prs = response.json()
+            current_prs: List[Dict[str, Any]] = response.json()
             if not current_prs:
                 break
             prs.extend(current_prs)
@@ -128,7 +128,7 @@ class GitHubAPIClient:
 
         return prs
 
-    def get_issue_comments(self, owner: Optional[str] = None, repo: Optional[str] = None, issue_number: Optional[int] = None, since: Optional[str] = None) -> List[Dict]:
+    def get_issue_comments(self, owner: Optional[str] = None, repo: Optional[str] = None, issue_number: Optional[int] = None, since: Optional[str] = None) -> List[Dict[str, Any]]:
         """Issueコメントの取得"""
         return self._process_repositories(
             self._get_issue_comments_for_repo,
@@ -138,7 +138,7 @@ class GitHubAPIClient:
             since=since
         )
 
-    def _get_issue_comments_for_repo(self, repo_full_name: str, issue_number: int, since: Optional[str] = None) -> List[Dict]:
+    def _get_issue_comments_for_repo(self, repo_full_name: str, issue_number: int, since: Optional[str] = None) -> List[Dict[str, Any]]:
         """特定のリポジトリのIssueコメントを取得"""
         endpoint = f"repos/{repo_full_name}/issues/{issue_number}/comments"
         params = {
@@ -147,12 +147,12 @@ class GitHubAPIClient:
         if since:
             params["since"] = since
 
-        comments = []
+        comments: List[Dict[str, Any]] = []
         page = 1
         while True:
             params["page"] = page
             response = self._make_request("GET", endpoint, params)
-            current_comments = response.json()
+            current_comments: List[Dict[str, Any]] = response.json()
             if not current_comments:
                 break
             comments.extend(current_comments)
@@ -161,7 +161,7 @@ class GitHubAPIClient:
 
         return comments
 
-    def get_review_comments(self, owner: Optional[str] = None, repo: Optional[str] = None, pull_number: Optional[int] = None, since: Optional[str] = None) -> List[Dict]:
+    def get_review_comments(self, owner: Optional[str] = None, repo: Optional[str] = None, pull_number: Optional[int] = None, since: Optional[str] = None) -> List[Dict[str, Any]]:
         """レビューコメントの取得"""
         return self._process_repositories(
             self._get_review_comments_for_repo,
@@ -171,7 +171,7 @@ class GitHubAPIClient:
             since=since
         )
 
-    def _get_review_comments_for_repo(self, repo_full_name: str, pull_number: int, since: Optional[str] = None) -> List[Dict]:
+    def _get_review_comments_for_repo(self, repo_full_name: str, pull_number: int, since: Optional[str] = None) -> List[Dict[str, Any]]:
         """特定のリポジトリのレビューコメントを取得"""
         endpoint = f"repos/{repo_full_name}/pulls/{pull_number}/comments"
         params = {
@@ -180,12 +180,12 @@ class GitHubAPIClient:
         if since:
             params["since"] = since
 
-        comments = []
+        comments: List[Dict[str, Any]] = []
         page = 1
         while True:
             params["page"] = page
             response = self._make_request("GET", endpoint, params)
-            current_comments = response.json()
+            current_comments: List[Dict[str, Any]] = response.json()
             if not current_comments:
                 break
             comments.extend(current_comments)
@@ -204,14 +204,14 @@ if __name__ == "__main__":
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
-    
+
     logger = logging.getLogger(__name__)
     logger.info("GitHub APIクライアントの初期化を開始します")
-    
+
     try:
         settings = Settings()
         client = GitHubAPIClient(settings)
         logger.info("GitHub APIクライアントの初期化が完了しました")
     except Exception as e:
         logger.error(f"初期化中にエラーが発生しました: {e}", exc_info=True)
-        raise 
+        raise

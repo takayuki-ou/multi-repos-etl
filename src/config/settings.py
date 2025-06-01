@@ -6,6 +6,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 import yaml
 import logging
+from typing import Dict, List, Any
 
 # ロギングの設定
 logger = logging.getLogger(__name__)
@@ -22,10 +23,10 @@ CONFIG_FILE = ROOT_DIR / "config.yaml"
 class Settings:
     def __init__(self):
         """設定の初期化"""
-        self.config = self._load_config()
+        self.config: Dict[str, Any] = self._load_config()
         self._validate_config()
 
-    def _load_config(self) -> dict:
+    def _load_config(self) -> Dict[str, Any]:
         """設定ファイルを読み込む"""
         try:
             with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
@@ -40,7 +41,7 @@ class Settings:
             raise ValueError("設定ファイルにリポジトリリストが定義されていません")
 
     @property
-    def repositories(self) -> list:
+    def repositories(self) -> List[str]:
         """対象リポジトリリストを取得"""
         return self.config.get('repositories', [])
 
@@ -53,7 +54,7 @@ class Settings:
         return token
 
     @property
-    def db_config(self) -> dict:
+    def db_config(self) -> Dict[str, str]:
         """データベース接続設定を取得"""
         return {
             'host': os.getenv('DB_HOST', 'localhost'),
@@ -64,6 +65,6 @@ class Settings:
         }
 
     @property
-    def fetch_settings(self) -> dict:
+    def fetch_settings(self) -> Dict[str, Any]:
         """データ取得設定を取得"""
-        return self.config.get('fetch_settings', []) 
+        return self.config.get('fetch_settings', {})

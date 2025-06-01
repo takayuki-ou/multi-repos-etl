@@ -1,8 +1,9 @@
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
 from src.db.database import Database, Base
-import os # os モジュールをインポート
-import sqlite3 # SQLite接続エラーを捕捉するために追加
+import os
+from typing import Any, Generator
+from pathlib import Path
 
 # sqlalchemy.orm の declarative_base は非推奨ではないですが、
 # 元のコードに合わせてコメントアウトしておきます。
@@ -12,7 +13,7 @@ class TestDatabase:
 
     # tmp_path フィクスチャを使用して一時ディレクトリを作成
     @pytest.fixture
-    def db_path(self, tmp_path):
+    def db_path(self, tmp_path: Path) -> str:
         """一時的なSQLiteデータベースファイルのパスを生成"""
         # 一時ディレクトリ内に test_db ディレクトリを作成
         db_dir = tmp_path / "test_db"
@@ -20,12 +21,12 @@ class TestDatabase:
         return str(db_dir / "test_github_data.db")
 
     @pytest.fixture
-    def db_config(self, db_path):
+    def db_config(self, db_path: str) -> dict[str, str]:
         """テスト用のSQLiteデータベース設定"""
         return {'db_path': db_path}
 
     @pytest.fixture
-    def database(self, db_config):
+    def database(self, db_config: dict[str, str]) -> Generator[Database, None, None]:
         """テスト用のデータベースインスタンス"""
         # Databaseインスタンス作成時にディレクトリも作成される
         db = Database(db_config)
@@ -37,7 +38,7 @@ class TestDatabase:
         # if os.path.exists(db_config['db_path']):
         #     os.remove(db_config['db_path'])
 
-    def test_init_creates_directory(self, db_path):
+    def test_init_creates_directory(self, db_path: str) -> None:
         """__init__ がデータベースファイル用のディレクトリを作成することを確認"""
         db_dir = os.path.dirname(db_path)
         # ディレクトリが存在しない状態でインスタンス化
@@ -49,7 +50,7 @@ class TestDatabase:
         # ディレクトリが作成されたことを確認
         assert os.path.exists(db_dir)
 
-    def test_create_engine_success(self, database, db_path):
+    def test_create_engine_success(self, database: Database, db_path: str) -> None:
         """SQLite用エンジン作成の成功テスト"""
         assert database.engine is not None
         # SQLiteの接続文字列形式を確認
@@ -59,7 +60,7 @@ class TestDatabase:
         assert str(database.engine.url).endswith(os.path.basename(db_path))
         assert str(database.engine.url).startswith("sqlite:///")
 
-    def test_create_engine_default_path(self, tmp_path):
+    def test_create_engine_default_path(self, tmp_path: Path) -> None:
         """db_pathがconfigにない場合にデフォルトパスでエンジンが作成されるかテスト"""
         # デフォルトパスの親ディレクトリを作成しておく（必要ない場合もある）
         # default_dir = tmp_path / "default_db_dir"
@@ -69,7 +70,6 @@ class TestDatabase:
         test_dir = tmp_path / "cwd_test"
         test_dir.mkdir()
         os.chdir(test_dir)
-        default_db_file = test_dir / "github_data.db"
         try:
             db = Database({}) # 空のconfigを渡す
             assert db.engine is not None
@@ -83,10 +83,9 @@ class TestDatabase:
         finally:
             os.chdir(original_cwd) # カレントディレクトリを元に戻す
             # tryブロックでファイルが作成された場合に備えて削除
-            # if default_db_file.exists():
-            #     default_db_file.unlink()
+            pass
 
-    def test_get_session(self, database):
+    def test_get_session(self, database: Database) -> None:
         """セッション取得のテスト"""
         with database.get_session() as session:
             assert session is not None
@@ -98,7 +97,7 @@ class TestDatabase:
             from sqlalchemy import text
             session.execute(text("SELECT 1"))
 
-    def test_get_session_rollback(self, database, mocker):
+    def test_get_session_rollback(self, database: Database, mocker: Any) -> None:
         """セッションロールバックのテスト"""
         # SQLAlchemyErrorを発生させるモックを設定
         mock_session = mocker.MagicMock()
@@ -113,7 +112,7 @@ class TestDatabase:
 
         # get_session内でcommit時にエラーが発生し、rollbackが呼ばれることを確認
         with pytest.raises(SQLAlchemyError, match="Test commit error"):
-            with database.get_session() as session:
+            with database.get_session():
                  # このブロック内でエラーが発生する操作を行う必要はない
                  # コンテキストマネージャの __exit__ で commit が呼ばれる
                  pass
@@ -123,14 +122,14 @@ class TestDatabase:
         # クローズが呼び出されたか確認
         mock_session.close.assert_called_once()
 
-    def test_create_tables(self, database, mocker):
+    def test_create_tables(self, database: Database, mocker: Any) -> None:
         """テーブル作成のテスト"""
         # Base.metadata.create_all が呼ばれることを確認
         mock_metadata = mocker.patch.object(Base, 'metadata')
         database.create_tables()
         mock_metadata.create_all.assert_called_once_with(database.engine)
 
-    def test_drop_tables(self, database, mocker):
+    def test_drop_tables(self, database: Database, mocker: Any) -> None:
         """テーブル削除のテスト"""
         # Base.metadata.drop_all が呼ばれることを確認
         mock_metadata = mocker.patch.object(Base, 'metadata')

@@ -4,11 +4,12 @@ settings.pyのテストコード
 import os
 import pytest
 from unittest.mock import patch, mock_open
+from typing import Any, Generator
 import yaml
 from src.config.settings import Settings
 
 @pytest.fixture
-def mock_env_vars():
+def mock_env_vars() -> Generator[None, None, None]:
     """環境変数のモック"""
     with patch.dict(os.environ, {
         'GITHUB_TOKEN': 'test_token',
@@ -23,7 +24,7 @@ def mock_env_vars():
         yield
 
 @pytest.fixture
-def mock_config_file():
+def mock_config_file() -> str:
     """設定ファイルのモック"""
     config_data = {
         'repositories': ['owner1/repo1', 'owner2/repo2'],
@@ -35,7 +36,7 @@ def mock_config_file():
     }
     return yaml.dump(config_data)
 
-def test_settings_initialization(mock_env_vars, mock_config_file):
+def test_settings_initialization(mock_env_vars: Any, mock_config_file: str) -> None:
     """Settingsクラスの初期化テスト"""
     with patch('builtins.open', mock_open(read_data=mock_config_file)):
         settings = Settings()
@@ -60,20 +61,20 @@ def test_settings_initialization(mock_env_vars, mock_config_file):
         assert fetch_settings['max_prs_per_request'] == 100
         assert fetch_settings['request_interval'] == 1
 
-def test_missing_github_token():
+def test_missing_github_token() -> None:
     """GitHubトークンが設定されていない場合のテスト"""
     with patch.dict(os.environ, {}, clear=True):
         settings = Settings()
         with pytest.raises(ValueError, match="GitHub Personal Access Tokenが設定されていません"):
             _ = settings.github_token
 
-def test_invalid_config_file():
+def test_invalid_config_file() -> None:
     """無効な設定ファイルのテスト"""
     with patch('builtins.open', mock_open(read_data='invalid: yaml: content')):
         with pytest.raises(Exception):
             Settings()
 
-def test_missing_repositories():
+def test_missing_repositories() -> None:
     """リポジトリリストが設定されていない場合のテスト"""
     config_data = {'fetch_settings': {'initial_lookback_days': 30}}
     with patch('builtins.open', mock_open(read_data=yaml.dump(config_data))):
