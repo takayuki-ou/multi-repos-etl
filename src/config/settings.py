@@ -66,4 +66,13 @@ class Settings:
     @property
     def fetch_settings(self) -> dict:
         """データ取得設定を取得"""
-        return self.config.get('fetch_settings', []) 
+        return self.config.get('fetch_settings', [])
+
+    @property
+    def sqlite_db_path(self) -> str:
+        """SQLiteデータベースファイルのパスを取得"""
+        db_path_str = self.config.get('db_path', 'github_data.db')
+        db_path = Path(db_path_str)
+        if not db_path.is_absolute():
+            db_path = (ROOT_DIR / db_path).resolve()
+        return str(db_path)

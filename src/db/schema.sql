@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS pull_requests (
     updated_at TEXT NOT NULL,
     closed_at TEXT,
     merged_at TEXT,
+    body TEXT, -- PR本文を追加
     url TEXT NOT NULL,
     api_url TEXT NOT NULL,
     fetched_at TEXT NOT NULL

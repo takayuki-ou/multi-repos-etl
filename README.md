@@ -6,16 +6,27 @@ GitHubのプルリクエスト（PR）のデータを収集・分析し、開発
 
 ## 機能
 
-- GitHub APIを使用したPRデータの自動収集
-- PR、コメント、レビューの詳細な分析
-- 時系列でのトレンド分析
-- テキスト/CSV形式のレポート生成
-- データの可視化（グラフ）
+- GitHub APIを使用したPRデータの収集機能（`GitHubAPIClient`経由）
+- Streamlit GUIによるPRデータの可視化とインタラクティブな分析:
+    - リポジトリ一覧の表示
+    - 選択したリポジトリのPR一覧表示（状態・作成日でフィルタリング可能）
+    - PR詳細表示（タイトル、作成者、状態、説明本文、GitHubリンク）
+    - PRごとのレビューコメント表示
+- PR、コメント、レビューに関する情報のデータベースへの保存と利用
+
+## GUIの実行
+
+プロジェクトのルートディレクトリで以下のコマンドを実行してStreamlitアプリケーションを起動します。
+
+```bash
+streamlit run src/gui/app.py
+```
+
+ブラウザでGUIが開かれ、設定されたリポジトリのPRデータを閲覧・分析できます。
 
 ## 必要条件
 
 - Python 3.8以上
-- PostgreSQL 12以上
 - GitHub Personal Access Token (PAT)
 
 ## セットアップ
@@ -40,31 +51,28 @@ pip install -r requirements.txt
 ```
 
 4. 環境変数の設定:
-`.env`ファイルを作成し、以下の内容を設定:
+`.env`ファイルを作成し、少なくとも以下の内容を設定します:
 ```
 GITHUB_TOKEN=your_github_personal_access_token
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=github_pr_analysis
-DB_USER=your_db_user
-DB_PASSWORD=your_db_password
 ```
+`GITHUB_TOKEN` はGitHub APIからデータを取得するために必須です。
 
-5. データベースのセットアップ:
-```bash
-psql -U your_db_user -d github_pr_analysis -f src/db/schema.sql
-```
-
-6. 設定ファイルの編集:
-`config.yaml`を編集し、分析対象のリポジトリを設定:
+5. 設定ファイルの編集:
+`config.yaml`を編集して、分析対象のリポジトリやデータベースのパスを設定します。
 ```yaml
 # GitHub PRログ分析システム設定ファイル
 
-# 対象リポジトリリスト
+# 対象リポジトリリスト (例)
 repositories:
-  - your-org/your-repo
+  - owner1/repoA
+  # - owner2/repoB
 
-# データ取得設定
+# SQLiteデータベースファイルのパス
+# 絶対パスまたはプロジェクトルートからの相対パスで指定
+db_path: github_data.db
+# 例: data/my_prs.db
+
+# データ取得設定 (データ取得スクリプト用)
 fetch_settings:
   # 初回取得時の遡及期間（日数）
   initial_lookback_days: 30
@@ -76,51 +84,50 @@ fetch_settings:
 # ログ設定
 logging:
   level: INFO
-  file: logs/github_pr_analysis.log
+  file: logs/app.log # ログファイル名を変更しました
   format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 ```
 
+6. データベースについて:
+    - このシステムはデータベースとしてSQLiteを使用します。SQLiteはファイルベースのデータベースであり、`config.yaml`で指定された`db_path`の場所にデータベースファイルが作成されます。
+    - アプリケーション（GUIまたはデータ取得スクリプト）の初回実行時に、`src/db/schema.sql`に基づいて必要なテーブルが自動的に作成されます。
+    - **注意:** `schema.sql`が更新された場合（例: カラムの追加）、既存のデータベースファイルに対しては自動的に変更が適用されません。手動でのスキーマ変更、マイグレーションツールの導入、またはデータベースファイルの再作成が必要になる場合があります。
+    - PRの本文（Description）は`pull_requests`テーブルの`body`カラムに格納されます。GUIで表示するためには、データ収集時にこの情報を取得・保存する必要があります。
+
 ## 使用方法
 
-1. GitHubデータの取得:
-```bash
-python scripts/fetch_github_data.py
-```
+1.  **設定**:
+    *   `config.yaml`に対象リポジトリと`db_path`（SQLiteデータベースファイルへのパス）を設定します。
+    *   `.env`ファイルに`GITHUB_TOKEN`を設定します。
 
-2. 分析の実行:
-```bash
-python scripts/run_analysis.py
-```
+2.  **データ収集**:
+    *   （現時点では、このリポジトリに汎用的なデータ収集スクriptは同梱されていません）
+    *   `src.data_collection.GitHubAPIClient`クラスを利用して、対象リポジトリからPRデータを収集し、設定されたSQLiteデータベースに保存するスクリプトを別途作成・実行する必要があります。
+    *   この際、PRの`body`（本文）やレビューコメントも収集し、データベースに保存するようにしてください。これらが収集されていれば、GUIで表示されます。
 
-3. レポートの確認:
-- テキストレポート: `output/reports/report.txt`
-- CSVレポート: `output/reports/metrics.csv`
-- グラフ: `output/graphs/`ディレクトリ内
+3.  **GUIの実行**:
+    *   上記「GUIの実行」セクションの指示に従い、Streamlitアプリケーションを起動します。
+    ```bash
+    streamlit run src/gui/app.py
+    ```
+    *   GUIを通じて、収集・保存されたPRデータのフィルタリング、詳細表示（本文含む）、レビューコメントの確認が可能です。
 
-## 出力例
+## 注意事項
+- `config.yaml`内のリポジトリ名は `owner/repository_name` の形式で正しく指定してください。
+- `GITHUB_TOKEN`には、対象リポジトリへのアクセス権限（`repo`スコープなど）が必要です。
+- 現状、`Settings`クラス内にはPostgreSQL接続用の設定 (`db_config`プロパティ) も残っていますが、SQLiteを主として利用する場合、`config.yaml`の`db_path`が主に参照されます。
 
-### テキストレポート
-```
-GitHub PR分析レポート
-生成日時: 2024-01-01 12:00:00
+## 出力例（GUI）
 
-プルリクエストの統計
---------------------------------------------------
-総PR数: 100
-オープン中のPR数: 10
-クローズされたPR数: 80
-マージされたPR数: 70
-平均追加行数: 150.5
-平均削除行数: 75.2
-平均変更ファイル数: 5.8
-平均リードタイム: 24.5時間
-...
+Streamlit GUIでは以下の情報がインタラクティブに表示されます（データベースに該当データが存在する場合）。
 
-```
-
-### グラフ
-- PRの状態分布
-- レビューの分布
-- 時系列でのPR作成数推移
-- 時系列でのコメント数推移
-- 時系列でのレビュー数推移
+-   **リポジトリ選択**: サイドバーで分析対象のリポジトリを選択。
+-   **PR一覧**: 選択されたリポジトリのPRをフィルタリング（状態、日付）して表形式で表示（番号、タイトル、作成者、状態、作成日時、更新日時、URL）。
+-   **PR詳細**:
+    -   タイトル（番号含む）、作成者、状態。
+    -   GitHub上のPRへの直接リンク。
+    -   PR本文（Description）。
+-   **レビューコメント**:
+    -   コメント投稿者、投稿日時。
+    -   コメント本文（Markdown形式で表示）。
+    -   GitHub上のコメントへの直接リンク。
