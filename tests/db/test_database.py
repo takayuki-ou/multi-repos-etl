@@ -142,7 +142,7 @@ class TestDatabase:
         # クローズが呼び出されたか確認
         mock_session.close.assert_called_once()
 
-    def test_create_tables(self, database: Database, mocker: Any) -> None:
+    def test_create_tables(self, database: Database, mocker: Any, db_config: dict) -> None:
         """テーブル作成のテスト"""
         # Base.metadata.create_all が呼ばれることを確認
         mock_metadata = mocker.patch.object(Base, 'metadata')
@@ -151,7 +151,7 @@ class TestDatabase:
         db_instance_for_mock_test.create_tables()
         mock_metadata.create_all.assert_called_once_with(db_instance_for_mock_test.engine)
 
-    def test_drop_tables(self, database: Database, mocker: Any) -> None:
+    def test_drop_tables(self, database: Database, mocker: Any, db_config: dict) -> None:
         """テーブル削除のテスト"""
         # Base.metadata.drop_all が呼ばれることを確認
         mock_metadata = mocker.patch.object(Base, 'metadata')
