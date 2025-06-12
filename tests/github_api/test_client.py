@@ -6,11 +6,12 @@ from unittest.mock import patch, MagicMock
 from datetime import datetime
 import requests
 import logging
+from typing import Any
 from src.github_api.client import GitHubAPIClient
 from src.config.settings import Settings
 
 @pytest.fixture
-def mock_settings():
+def mock_settings() -> Any:
     """Settingsクラスのモック"""
     settings = MagicMock(spec=Settings)
     settings.github_token = 'test_token'
@@ -31,7 +32,7 @@ def mock_settings():
     return settings
 
 @pytest.fixture
-def mock_response():
+def mock_response() -> Any:
     """APIレスポンスのモック"""
     response = MagicMock()
     response.json.return_value = [{'id': 1, 'title': 'Test PR'}]
@@ -43,7 +44,7 @@ def mock_response():
     response.raise_for_status = MagicMock()
     return response
 
-def test_github_api_client_initialization(mock_settings):
+def test_github_api_client_initialization(mock_settings: Any) -> None:
     """GitHubAPIClientの初期化テスト"""
     client = GitHubAPIClient(mock_settings)
     assert client.headers['Authorization'] == 'token test_token'
@@ -51,7 +52,7 @@ def test_github_api_client_initialization(mock_settings):
     assert client.headers['User-Agent'] == 'GitHub-PR-Analysis-System'
 
 @patch('requests.request')
-def test_get_pull_requests_single_repo(mock_request, mock_settings, mock_response):
+def test_get_pull_requests_single_repo(mock_request: Any, mock_settings: Any, mock_response: Any) -> None:
     """特定のリポジトリのプルリクエスト取得のテスト"""
     # 2ページ分のデータを返すように設定
     mock_response.json.side_effect = [
@@ -71,7 +72,7 @@ def test_get_pull_requests_single_repo(mock_request, mock_settings, mock_respons
     assert mock_request.call_count == 2  # 2回のAPIリクエストを確認
 
 @patch('requests.request')
-def test_get_pull_requests_all_repos(mock_request, mock_settings, mock_response):
+def test_get_pull_requests_all_repos(mock_request: Any, mock_settings: Any, mock_response: Any) -> None:
     """全リポジトリのプルリクエスト取得のテスト"""
     # 各リポジトリに対して2ページ分のデータを返すように設定
     mock_response.json.side_effect = [
@@ -97,7 +98,7 @@ def test_get_pull_requests_all_repos(mock_request, mock_settings, mock_response)
     assert mock_request.call_count == 4  # 4回のAPIリクエストを確認
 
 @patch('requests.request')
-def test_get_issue_comments_single_repo(mock_request, mock_settings, mock_response):
+def test_get_issue_comments_single_repo(mock_request: Any, mock_settings: Any, mock_response: Any) -> None:
     """特定のリポジトリのIssueコメント取得のテスト"""
     # 2ページ分のデータを返すように設定
     mock_response.json.side_effect = [
@@ -117,7 +118,7 @@ def test_get_issue_comments_single_repo(mock_request, mock_settings, mock_respon
     assert mock_request.call_count == 2  # 2回のAPIリクエストを確認
 
 @patch('requests.request')
-def test_get_review_comments_single_repo(mock_request, mock_settings, mock_response):
+def test_get_review_comments_single_repo(mock_request: Any, mock_settings: Any, mock_response: Any) -> None:
     """特定のリポジトリのレビューコメント取得のテスト"""
     # 2ページ分のデータを返すように設定
     mock_response.json.side_effect = [
@@ -154,7 +155,7 @@ def test_get_review_comments_single_repo(mock_request, mock_settings, mock_respo
     assert mock_request.call_count == 2  # 2回のAPIリクエストを確認
 
 @patch('requests.request')
-def test_rate_limit_handling(mock_request, mock_settings):
+def test_rate_limit_handling(mock_request: Any, mock_settings: Any) -> None:
     """レート制限処理のテスト"""
     response = MagicMock()
     response.headers = {
@@ -163,22 +164,32 @@ def test_rate_limit_handling(mock_request, mock_settings):
     }
     mock_request.return_value = response
     
-    client = GitHubAPIClient(mock_settings)
     with patch('time.sleep') as mock_sleep:
-        client._handle_rate_limit(response)
+        # Create a public wrapper method for testing
+        class TestableClient(GitHubAPIClient):
+            def handle_rate_limit_test(self, response: Any) -> None:
+                return self._handle_rate_limit(response)
+        
+        testable_client = TestableClient(mock_settings)
+        testable_client.handle_rate_limit_test(response)
         mock_sleep.assert_called_once()
 
 @patch('requests.request')
-def test_api_error_handling(mock_request, mock_settings):
+def test_api_error_handling(mock_request: Any, mock_settings: Any) -> None:
     """APIエラー処理のテスト"""
     mock_request.side_effect = Exception('API Error')
     
-    client = GitHubAPIClient(mock_settings)
     with pytest.raises(Exception, match='API Error'):
-        client._make_request('GET', 'test/endpoint')
+        # Create a public wrapper method for testing
+        class TestableClient(GitHubAPIClient):
+            def make_request_test(self, method: str, endpoint: str) -> Any:
+                return self._make_request(method, endpoint)
+        
+        testable_client = TestableClient(mock_settings)
+        testable_client.make_request_test('GET', 'test/endpoint')
 
 @patch('requests.request')
-def test_nonexistent_repository_error(mock_request, mock_settings, caplog):
+def test_nonexistent_repository_error(mock_request: Any, mock_settings: Any, caplog: Any) -> None:
     """存在しないリポジトリへのアクセス時のエラー処理テスト"""
     # ログレベルをDEBUGに設定
     caplog.set_level(logging.DEBUG)
@@ -210,7 +221,7 @@ def test_nonexistent_repository_error(mock_request, mock_settings, caplog):
     assert "nonexistent_owner/nonexistent_repo" in caplog.text
 
 @patch('requests.request')
-def test_partial_success_with_multiple_repos(mock_request, mock_settings, caplog):
+def test_partial_success_with_multiple_repos(mock_request: Any, mock_settings: Any, caplog: Any) -> None:
     """複数のリポジトリのうち一部が失敗する場合の処理テスト"""
     # ログレベルをDEBUGに設定
     caplog.set_level(logging.DEBUG)
