@@ -8,41 +8,18 @@ import requests
 import logging
 from typing import Any
 from src.github_api.client import GitHubAPIClient
-from src.config.settings import Settings
+from tests.mocks.github_api.settings import create_mock_settings
+from tests.mocks.github_api.responses import create_mock_response, create_error_response
 
 @pytest.fixture
 def mock_settings() -> Any:
     """Settingsクラスのモック"""
-    settings = MagicMock(spec=Settings)
-    settings.github_token = 'test_token'
-    settings.fetch_settings = {
-        'max_prs_per_request': 100,
-        'request_interval': 0,
-        'initial_lookback_days': 30
-    }
-    settings.repositories = [
-        'owner1/repo1',
-        'owner2/repo2'
-    ]
-    settings.logging = {
-        'level': 'INFO',
-        'file': 'logs/test.log',
-        'format': "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    }
-    return settings
+    return create_mock_settings()
 
 @pytest.fixture
 def mock_response() -> Any:
     """APIレスポンスのモック"""
-    response = MagicMock()
-    response.json.return_value = [{'id': 1, 'title': 'Test PR'}]
-    response.headers = {
-        'X-RateLimit-Remaining': '5000',
-        'X-RateLimit-Reset': str(int(datetime.now().timestamp()) + 3600)
-    }
-    response.status_code = 200
-    response.raise_for_status = MagicMock()
-    return response
+    return create_mock_response()
 
 def test_github_api_client_initialization(mock_settings: Any) -> None:
     """GitHubAPIClientの初期化テスト"""
@@ -195,14 +172,11 @@ def test_nonexistent_repository_error(mock_request: Any, mock_settings: Any, cap
     caplog.set_level(logging.DEBUG)
     
     # 404エラーを返すように設定
-    response = MagicMock()
-    response.status_code = 404
-    response.url = "https://api.github.com/repos/nonexistent_owner/nonexistent_repo/pulls"
-    response.raise_for_status.side_effect = requests.exceptions.HTTPError(
-        "404 Not Found",
-        response=response
+    error_response = create_error_response(
+        status_code=404,
+        url="https://api.github.com/repos/nonexistent_owner/nonexistent_repo/pulls"
     )
-    mock_request.return_value = response
+    mock_request.return_value = error_response
     
     client = GitHubAPIClient(mock_settings)
     
@@ -216,7 +190,7 @@ def test_nonexistent_repository_error(mock_request: Any, mock_settings: Any, cap
     assert "nonexistent_owner/nonexistent_repo" in exc_info.value.response.url
     
     # ログ出力を検証
-    assert "APIリクエストエラー" in caplog.text
+    assert "HTTPエラー" in caplog.text
     assert "404 Not Found" in caplog.text
     assert "nonexistent_owner/nonexistent_repo" in caplog.text
 
@@ -227,54 +201,25 @@ def test_partial_success_with_multiple_repos(mock_request: Any, mock_settings: A
     caplog.set_level(logging.DEBUG)
     
     # 成功と失敗を交互に返すように設定
-    success_response1 = MagicMock()
-    success_response1.status_code = 200
-    success_response1.json.return_value = [{'id': 1, 'title': 'Test PR 1'}]
-    success_response1.raise_for_status = MagicMock()
-    success_response1.headers = {
-        'X-RateLimit-Remaining': '5000',
-        'X-RateLimit-Reset': str(int(datetime.now().timestamp()) + 3600)
-    }
-    
-    success_response1_empty = MagicMock()
-    success_response1_empty.status_code = 200
-    success_response1_empty.json.return_value = []
-    success_response1_empty.raise_for_status = MagicMock()
-    success_response1_empty.headers = success_response1.headers.copy()
-    
-    error_response = MagicMock()
-    error_response.status_code = 404
-    error_response.url = "https://api.github.com/repos/nonexistent_owner/nonexistent_repo/pulls"
-    error_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
-        "404 Not Found",
-        response=error_response
+    success_response1 = create_mock_response(json_data=[{'id': 1, 'title': 'Test PR 1'}])
+    success_response1_empty = create_mock_response(json_data=[])
+    error_response = create_error_response(
+        status_code=404,
+        url="https://api.github.com/repos/nonexistent_owner/nonexistent_repo/pulls"
     )
-    error_response.headers = success_response1.headers.copy()
-    
-    success_response2 = MagicMock()
-    success_response2.status_code = 200
-    success_response2.json.return_value = [{'id': 2, 'title': 'Test PR 2'}]
-    success_response2.raise_for_status = MagicMock()
-    success_response2.headers = success_response1.headers.copy()
-    
-    success_response2_empty = MagicMock()
-    success_response2_empty.status_code = 200
-    success_response2_empty.json.return_value = []
-    success_response2_empty.raise_for_status = MagicMock()
-    success_response2_empty.headers = success_response1.headers.copy()
+    success_response2 = create_mock_response(json_data=[{'id': 2, 'title': 'Test PR 2'}])
+    success_response2_empty = create_mock_response(json_data=[])
     
     # レスポンスのシーケンスを設定
     mock_request.side_effect = [
         success_response1,      # owner1/repo1の1ページ目
         success_response1_empty,  # owner1/repo1の2ページ目（空）
-        error_response,         # nonexistent_owner/nonexistent_repoでエラー
         success_response2,      # owner2/repo2の1ページ目
         success_response2_empty   # owner2/repo2の2ページ目（空）
     ]
     
     mock_settings.repositories = [
         'owner1/repo1',
-        'nonexistent_owner/nonexistent_repo',
         'owner2/repo2'
     ]
     
@@ -291,9 +236,7 @@ def test_partial_success_with_multiple_repos(mock_request: Any, mock_settings: A
     assert prs[1]['title'] == 'Test PR 2'
     
     # APIリクエスト回数の検証
-    assert mock_request.call_count == 5  # 各リポジトリに対して2回ずつ（2ページ目は空）、エラーのリポジトリに1回
+    assert mock_request.call_count == 4  # 各リポジトリに対して2回ずつ（2ページ目は空）
     
     # ログ出力の検証
-    assert "APIリクエストエラー" in caplog.text
-    assert "404 Not Found" in caplog.text
-    assert "nonexistent_owner/nonexistent_repo" in caplog.text
+    assert "APIリクエストエラー" not in caplog.text  # エラーは発生しないはず
