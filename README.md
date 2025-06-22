@@ -33,8 +33,8 @@ streamlit run src/gui/app.py
 
 1. リポジトリのクローン:
 ```bash
-git clone https://github.com/your-username/github-pr-da.git
-cd github-pr-da
+git clone git https://github.com/takayuki-ou/multi-repos-etl.git
+cd multi-repo-etl
 ```
 
 2. 仮想環境の作成と有効化:
