@@ -71,7 +71,7 @@ class GitHubAPIClient:
             logger.error(f"タイムアウト: {e}")
             raise
 
-    def _process_repositories(self, func: Callable[..., List[Dict[str, Any]]], owner: Optional[str] = None, repo: Optional[str] = None, **kwargs: Any) -> List[Dict[str, Any]]:
+    def _process_repositories(self, func: Callable[..., List[Dict[str, Any]]], owner: Optional[str] = None, repo: Optional[str] = None, **kwargs) -> List[Dict[str, Any]]:
         """リポジトリ処理の共通ロジック
 
         Args:
@@ -85,17 +85,17 @@ class GitHubAPIClient:
         """
         results: List[Dict[str, Any]] = []
         target_repos = [f"{owner}/{repo}"] if owner and repo else self.repositories
+        is_single_repo = owner is not None and repo is not None
 
         for repo_full_name in target_repos:
             try:
                 result: List[Dict[str, Any]] = func(repo_full_name, **kwargs)
                 results.extend(result)
-            except requests.exceptions.HTTPError as e:
-                # 404エラーは上位で処理するため、そのまま伝播
-                raise
             except requests.exceptions.RequestException as e:
                 logger.error(f"リポジトリ {repo_full_name} の処理に失敗しました: {e}")
-                # その他のエラーは処理を継続
+                if is_single_repo:
+                    # 単一リポジトリの場合は例外を再発生させる
+                    raise
                 continue
 
         return results

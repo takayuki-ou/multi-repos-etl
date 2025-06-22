@@ -35,7 +35,7 @@ def create_mock_response(json_data=None, status_code=200):
     """APIレスポンスのモックを作成"""
     from unittest.mock import MagicMock
     response = MagicMock()
-    response.json.return_value = json_data or [{'id': 1, 'title': 'Test PR'}]
+    response.json.return_value = json_data if json_data is not None else [{'id': 1, 'title': 'Test PR'}]
     response.headers = {
         'X-RateLimit-Remaining': '5000',
         'X-RateLimit-Reset': str(int(datetime.now().timestamp()) + 3600)
