@@ -61,11 +61,17 @@ class GitHubAPIClient:
             logger.debug(f"レート制限: 残り {response.headers.get('X-RateLimit-Remaining')} リセット時刻 {response.headers.get('X-RateLimit-Reset')}")
             self._handle_rate_limit(response)
             return response
-        except requests.exceptions.RequestException as e:
-            logger.error(f"APIリクエストエラー: {e}")
+        except requests.exceptions.HTTPError as e:
+            logger.error(f"HTTPエラー: {e}")
+            raise
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"接続エラー: {e}")
+            raise
+        except requests.exceptions.Timeout as e:
+            logger.error(f"タイムアウト: {e}")
             raise
 
-    def _process_repositories(self, func: Callable[..., List[Dict[str, Any]]], owner: Optional[str] = None, repo: Optional[str] = None, **kwargs: Any) -> List[Dict[str, Any]]:
+    def _process_repositories(self, func: Callable[..., List[Dict[str, Any]]], owner: Optional[str] = None, repo: Optional[str] = None, **kwargs) -> List[Dict[str, Any]]:
         """リポジトリ処理の共通ロジック
 
         Args:
@@ -78,9 +84,8 @@ class GitHubAPIClient:
             List[Dict[str, Any]]: 処理結果のリスト
         """
         results: List[Dict[str, Any]] = []
-
-        # 取得対象のリポジトリリストを決定
         target_repos = [f"{owner}/{repo}"] if owner and repo else self.repositories
+        is_single_repo = owner is not None and repo is not None
 
         for repo_full_name in target_repos:
             try:
@@ -88,9 +93,9 @@ class GitHubAPIClient:
                 results.extend(result)
             except requests.exceptions.RequestException as e:
                 logger.error(f"リポジトリ {repo_full_name} の処理に失敗しました: {e}")
-                if owner and repo:  # 特定のリポジトリが指定された場合は例外を投げる
+                if is_single_repo:
+                    # 単一リポジトリの場合は例外を再発生させる
                     raise
-                # エラーが発生しても処理を継続
                 continue
 
         return results
@@ -118,13 +123,17 @@ class GitHubAPIClient:
         page = 1
         while True:
             params["page"] = page
-            response = self._make_request("GET", endpoint, params)
-            current_prs: List[Dict[str, Any]] = response.json()
-            if not current_prs:
-                break
-            prs.extend(current_prs)
-            page += 1
-            time.sleep(self.settings.fetch_settings["request_interval"])
+            try:
+                response = self._make_request("GET", endpoint, params)
+                current_prs: List[Dict[str, Any]] = response.json()
+                if not current_prs:  # 空のレスポンスを受け取ったら終了
+                    break
+                prs.extend(current_prs)
+                page += 1
+                time.sleep(self.settings.fetch_settings["request_interval"])
+            except requests.exceptions.HTTPError as e:
+                # 404エラーは上位で処理するため、そのまま伝播させる
+                raise
 
         return prs
 

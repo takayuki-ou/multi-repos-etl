@@ -12,7 +12,7 @@ from sqlalchemy import text # text をインポート
 from datetime import datetime # datetimeをインポート
 
 # プロジェクトルートからの相対パスでschema.sqlを指定
-SCHEMA_PATH = os.path.join(os.path.dirname(__file__), '../../src/db/schema.sql')
+SCHEMA_PATH = os.path.join(os.path.dirname(__file__), '../../../src/db/schema.sql')
 
 class TestDatabase:
 

@@ -1,0 +1,15 @@
+repositories:
+  - test/repo1
+  - test/repo2
+
+db_path: tests/integration/db/data/test.db
+
+fetch_settings:
+  initial_lookback_days: 1
+  max_prs_per_request: 10
+  request_interval: 1
+
+logging:
+  level: DEBUG
+  file: tests/integration/logs/test.log
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s" 

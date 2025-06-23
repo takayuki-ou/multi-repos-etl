@@ -5,36 +5,24 @@ import os
 import pytest
 from unittest.mock import patch, mock_open
 from typing import Any, Generator
-import yaml
 from src.config.settings import Settings
+from tests.mocks.config.settings import (
+    create_mock_env_vars,
+    create_mock_config_file,
+    create_invalid_config_file,
+    create_missing_repositories_config_file
+)
 
 @pytest.fixture
 def mock_env_vars() -> Generator[None, None, None]:
     """環境変数のモック"""
-    with patch.dict(os.environ, {
-        'GITHUB_TOKEN': 'test_token',
-        'DB_HOST': 'test_host',
-        'DB_PORT': '5432',
-        'DB_NAME': 'test_db',
-        'DB_USER': 'test_user',
-        'DB_PASSWORD': 'test_password',
-        'APP_ENV': 'test',
-        'LOG_LEVEL': 'DEBUG'
-    }):
+    for _ in create_mock_env_vars():
         yield
 
 @pytest.fixture
 def mock_config_file() -> str:
     """設定ファイルのモック"""
-    config_data = {
-        'repositories': ['owner1/repo1', 'owner2/repo2'],
-        'fetch_settings': {
-            'initial_lookback_days': 30,
-            'max_prs_per_request': 100,
-            'request_interval': 1
-        }
-    }
-    return yaml.dump(config_data)
+    return create_mock_config_file()
 
 def test_settings_initialization(mock_env_vars: Any, mock_config_file: str) -> None:
     """Settingsクラスの初期化テスト"""
@@ -70,13 +58,12 @@ def test_missing_github_token() -> None:
 
 def test_invalid_config_file() -> None:
     """無効な設定ファイルのテスト"""
-    with patch('builtins.open', mock_open(read_data='invalid: yaml: content')):
+    with patch('builtins.open', mock_open(read_data=create_invalid_config_file())):
         with pytest.raises(Exception):
             Settings()
 
 def test_missing_repositories() -> None:
     """リポジトリリストが設定されていない場合のテスト"""
-    config_data = {'fetch_settings': {'initial_lookback_days': 30}}
-    with patch('builtins.open', mock_open(read_data=yaml.dump(config_data))):
+    with patch('builtins.open', mock_open(read_data=create_missing_repositories_config_file())):
         with pytest.raises(ValueError, match="設定ファイルにリポジトリリストが定義されていません"):
             Settings() 
