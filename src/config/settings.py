@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # プロジェクトのルートディレクトリを取得
-ROOT_DIR = Path(__file__).parent.parent.parent
+# This assumes settings.py is located at <ROOT_DIR>/src/config/settings.py
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 
 # 設定ファイルのパス
 CONFIG_FILE = ROOT_DIR / "config.yaml"
