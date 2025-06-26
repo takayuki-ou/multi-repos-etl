@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional, Any, Dict, List, Union
 
 MOCK_PR_RESPONSE = {
     "number": 1,
@@ -31,7 +32,7 @@ NOT_FOUND_ERROR = {
 }
 
 # APIレスポンスのモック
-def create_mock_response(json_data=None, status_code=200):
+def create_mock_response(json_data: Optional[Union[Dict[str, Any], List[Any]]] = None, status_code: int = 200):
     """APIレスポンスのモックを作成"""
     from unittest.mock import MagicMock
     response = MagicMock()
@@ -45,7 +46,7 @@ def create_mock_response(json_data=None, status_code=200):
     return response
 
 # エラーレスポンスのモック
-def create_error_response(status_code=404, url=None):
+def create_error_response(status_code: int = 404, url: Optional[str] = None):
     """エラーレスポンスのモックを作成"""
     from unittest.mock import MagicMock
     import requests
@@ -56,4 +57,4 @@ def create_error_response(status_code=404, url=None):
         f"{status_code} {'Not Found' if status_code == 404 else 'Error'}",
         response=response
     )
-    return response 
+    return response

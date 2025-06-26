@@ -71,7 +71,7 @@ class GitHubAPIClient:
             logger.error(f"タイムアウト: {e}")
             raise
 
-    def _process_repositories(self, func: Callable[..., List[Dict[str, Any]]], owner: Optional[str] = None, repo: Optional[str] = None, **kwargs) -> List[Dict[str, Any]]:
+    def _process_repositories(self, func: Callable[..., List[Dict[str, Any]]], owner: Optional[str] = None, repo: Optional[str] = None, **kwargs: Any) -> List[Dict[str, Any]]:
         """リポジトリ処理の共通ロジック
 
         Args:
@@ -133,6 +133,7 @@ class GitHubAPIClient:
                 time.sleep(self.settings.fetch_settings["request_interval"])
             except requests.exceptions.HTTPError as e:
                 # 404エラーは上位で処理するため、そのまま伝播させる
+                logger.debug(f"HTTPエラーが発生しました: {e}")
                 raise
 
         return prs

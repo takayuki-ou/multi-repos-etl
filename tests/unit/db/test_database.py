@@ -2,14 +2,14 @@ import pytest
 from sqlalchemy.exc import SQLAlchemyError
 from src.db.database import Database, Base
 import os
-from typing import Any, Generator
+from typing import Any, Dict, Generator
 from pathlib import Path
 
 # sqlalchemy.orm の declarative_base は非推奨ではないですが、
 # 元のコードに合わせてコメントアウトしておきます。
 # from sqlalchemy.orm import declarative_base
 from sqlalchemy import text # text をインポート
-from datetime import datetime # datetimeをインポート
+from datetime import datetime, timezone # datetimeとtimezoneをインポート
 
 # プロジェクトルートからの相対パスでschema.sqlを指定
 SCHEMA_PATH = os.path.join(os.path.dirname(__file__), '../../../src/db/schema.sql')
@@ -25,12 +25,12 @@ class TestDatabase:
         return str(db_dir / "test_github_data_func.db")
 
     @pytest.fixture(scope="function")
-    def db_config(self, db_path):
+    def db_config(self, db_path: str) -> Dict[str, str]:
         """テスト用のSQLiteデータベース設定"""
         return {'db_path': db_path}
 
     @pytest.fixture(scope="function")
-    def database(self, db_config):
+    def database(self, db_config: Dict[str, str]) -> Generator[Database, None, None]:
         """テスト用のデータベースインスタンス（スキーマ適用済み）"""
 
         db = Database(db_config)
@@ -142,7 +142,7 @@ class TestDatabase:
         # クローズが呼び出されたか確認
         mock_session.close.assert_called_once()
 
-    def test_create_tables(self, database: Database, mocker: Any, db_config: dict) -> None:
+    def test_create_tables(self, database: Database, mocker: Any, db_config: Dict[str, str]) -> None:
         """テーブル作成のテスト"""
         # Base.metadata.create_all が呼ばれることを確認
         mock_metadata = mocker.patch.object(Base, 'metadata')
@@ -151,7 +151,7 @@ class TestDatabase:
         db_instance_for_mock_test.create_tables()
         mock_metadata.create_all.assert_called_once_with(db_instance_for_mock_test.engine)
 
-    def test_drop_tables(self, database: Database, mocker: Any, db_config: dict) -> None:
+    def test_drop_tables(self, database: Database, mocker: Any, db_config: Dict[str, str]) -> None:
         """テーブル削除のテスト"""
         # Base.metadata.drop_all が呼ばれることを確認
         mock_metadata = mocker.patch.object(Base, 'metadata')
@@ -162,13 +162,13 @@ class TestDatabase:
 
     # --- Tests for data retrieval methods ---
 
-    def test_get_repository_list_empty(self, database):
+    def test_get_repository_list_empty(self, database: Database) -> None:
         """データベースが空の場合に空のリストを返すことをテスト"""
         assert database.get_repository_list() == []
 
-    def test_get_repository_list_with_data(self, database):
+    def test_get_repository_list_with_data(self, database: Database) -> None:
         """データが存在する場合にリポジトリリストを正しく返すことをテスト"""
-        now_str = datetime.utcnow().isoformat()
+        now_str = datetime.now(timezone.utc).isoformat()
         repo_data = [
             (1, 'owner1', 'repo1', 'url1', now_str, now_str, now_str),
             (2, 'owner2', 'repo2', 'url2', now_str, now_str, now_str),
@@ -187,9 +187,9 @@ class TestDatabase:
         assert {'id': 1, 'owner_login': 'owner1', 'name': 'repo1', 'url': 'url1'} in result
         assert {'id': 2, 'owner_login': 'owner2', 'name': 'repo2', 'url': 'url2'} in result
 
-    def test_get_pull_requests_no_prs(self, database):
+    def test_get_pull_requests_no_prs(self, database: Database) -> None:
         """リポジトリにPRがない場合に空のリストを返すことをテスト"""
-        now_str = datetime.utcnow().isoformat()
+        now_str = datetime.now(timezone.utc).isoformat()
         with database.get_session() as session:
             session.execute(text("""
                 INSERT INTO repositories (id, owner_login, name, url, created_at, updated_at, fetched_at)
@@ -198,9 +198,9 @@ class TestDatabase:
             session.commit()
         assert database.get_pull_requests_for_repository(repository_id=1) == []
 
-    def test_get_pull_requests_with_data(self, database):
+    def test_get_pull_requests_with_data(self, database: Database) -> None:
         """リポジトリにPRがある場合に正しくPRリストを返すことをテスト"""
-        now_str = datetime.utcnow().isoformat()
+        now_str = datetime.now(timezone.utc).isoformat()
         repo_id = 1
         pr_data = [
             (101, repo_id, 1, 'PR Title 1', 'userA', 'open', now_str, now_str, None, None, 'Body 1', 'url_pr1', 'api1', now_str),
@@ -232,13 +232,13 @@ class TestDatabase:
         assert result_set == expected_set
 
 
-    def test_get_pull_requests_non_existent_repo(self, database):
+    def test_get_pull_requests_non_existent_repo(self, database: Database) -> None:
         """存在しないリポジトリIDの場合に空のリストを返すことをテスト"""
         assert database.get_pull_requests_for_repository(repository_id=99999) == []
 
-    def test_get_review_comments_no_comments(self, database):
+    def test_get_review_comments_no_comments(self, database: Database) -> None:
         """PRにコメントがない場合に空のリストを返すことをテスト"""
-        now_str = datetime.utcnow().isoformat()
+        now_str = datetime.now(timezone.utc).isoformat()
         with database.get_session() as session:
             session.execute(text("INSERT INTO repositories VALUES (1, 'o', 'n', 'u', :n, :n, :n)"), {'n': now_str})
             session.execute(text("""
@@ -249,9 +249,9 @@ class TestDatabase:
             session.commit()
         assert database.get_review_comments_for_pr(pull_request_id=201) == []
 
-    def test_get_review_comments_with_data(self, database):
+    def test_get_review_comments_with_data(self, database: Database) -> None:
         """PRにコメントがある場合に正しくコメントリストを返すことをテスト"""
-        now_str = datetime.utcnow().isoformat()
+        now_str = datetime.now(timezone.utc).isoformat()
         pr_id = 202
         comments_data = [
             (301, pr_id, 'commenter1', 'This is a comment', now_str, now_str, 'api_c1', 'html_c1', now_str),
@@ -284,6 +284,6 @@ class TestDatabase:
         assert result_set == expected_set
 
 
-    def test_get_review_comments_non_existent_pr(self, database):
+    def test_get_review_comments_non_existent_pr(self, database: Database) -> None:
         """存在しないPR IDの場合に空のリストを返すことをテスト"""
         assert database.get_review_comments_for_pr(pull_request_id=88888) == []

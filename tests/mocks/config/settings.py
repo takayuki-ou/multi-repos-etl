@@ -1,6 +1,6 @@
 import os
 import yaml
-from typing import Generator
+from typing import Generator, Dict, Any
 from unittest.mock import patch
 
 def create_mock_env_vars() -> Generator[None, None, None]:
@@ -20,7 +20,7 @@ def create_mock_env_vars() -> Generator[None, None, None]:
         }):
             yield
 
-def create_mock_config_data() -> dict:
+def create_mock_config_data() -> Dict[str, Any]:
     """設定データのモック"""
     return {
         'repositories': ['owner1/repo1', 'owner2/repo2'],
@@ -28,7 +28,8 @@ def create_mock_config_data() -> dict:
             'initial_lookback_days': 30,
             'max_prs_per_request': 100,
             'request_interval': 1
-        }
+        },
+        'db_path': 'test_github_data.db'
     }
 
 def create_mock_config_file() -> str:
@@ -42,4 +43,4 @@ def create_invalid_config_file() -> str:
 def create_missing_repositories_config_file() -> str:
     """リポジトリリストが欠落した設定ファイルのモック"""
     config_data = {'fetch_settings': {'initial_lookback_days': 30}}
-    return yaml.dump(config_data) 
+    return yaml.dump(config_data)

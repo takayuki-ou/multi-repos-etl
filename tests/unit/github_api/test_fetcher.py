@@ -3,7 +3,7 @@ Unit tests for src/github_api/fetcher.py
 """
 import pytest
 from unittest.mock import MagicMock, call, patch
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any, Optional, List, Dict
 
 # Modules to test
 from src.github_api.fetcher import GitHubFetcher
@@ -12,27 +12,27 @@ from src.github_api.client import GitHubAPIClient
 # from src.db.database import DatabaseHandler
 
 # Mock data
-mock_pr_data_page1 = [
+mock_pr_data_page1: List[Dict[str, Any]] = [
     {"id": 1, "number": 101, "title": "Feature: New login page"},
     {"id": 2, "number": 102, "title": "Bugfix: User logout issue"},
 ]
-mock_pr_data_page2 = [
+mock_pr_data_page2: List[Dict[str, Any]] = [
     {"id": 3, "number": 103, "title": "Docs: Update README"},
 ]
 
-mock_issue_comments_pr101 = [
+mock_issue_comments_pr101: List[Dict[str, Any]] = [
     {"id": 10, "body": "Comment on PR 101"},
 ]
-mock_issue_comments_pr102 = [
+mock_issue_comments_pr102: List[Dict[str, Any]] = [
     {"id": 11, "body": "Another comment on PR 102"},
 ]
-mock_issue_comments_pr103 = [] # No issue comments for PR 103
+mock_issue_comments_pr103: List[Dict[str, Any]] = [] # No issue comments for PR 103
 
-mock_review_comments_pr101 = [] # No review comments for PR 101
-mock_review_comments_pr102 = [
+mock_review_comments_pr101: List[Dict[str, Any]] = [] # No review comments for PR 101
+mock_review_comments_pr102: List[Dict[str, Any]] = [
     {"id": 20, "body": "Review comment on PR 102, file main.py", "path": "main.py"},
 ]
-mock_review_comments_pr103 = [
+mock_review_comments_pr103: List[Dict[str, Any]] = [
     {"id": 21, "body": "Review comment on PR 103, file README.md", "path": "README.md"},
     {"id": 22, "body": "Second review comment on PR 103", "path": "README.md"},
 ]
@@ -48,14 +48,14 @@ def mock_api_client() -> MagicMock:
 
     # Default behavior for get_issue_comments and get_review_comments
     # These will be configured per test as needed, or use side_effect
-    def get_issue_comments_side_effect(owner: str, repo: str, issue_number: int, since: Optional[str] = None):
+    def get_issue_comments_side_effect(owner: str, repo: str, issue_number: int, since: Optional[str] = None) -> List[Dict[str, Any]]:
         if issue_number == 101: return mock_issue_comments_pr101
         if issue_number == 102: return mock_issue_comments_pr102
         if issue_number == 103: return mock_issue_comments_pr103
         return []
     client.get_issue_comments.side_effect = get_issue_comments_side_effect
 
-    def get_review_comments_side_effect(owner: str, repo: str, pull_number: int, since: Optional[str] = None):
+    def get_review_comments_side_effect(owner: str, repo: str, pull_number: int, since: Optional[str] = None) -> List[Dict[str, Any]]:
         if pull_number == 101: return mock_review_comments_pr101
         if pull_number == 102: return mock_review_comments_pr102
         if pull_number == 103: return mock_review_comments_pr103
@@ -240,7 +240,7 @@ def test_fetch_all_data_for_repo_no_pull_requests(mock_api_client: MagicMock):
     assert len(issue_comments) == 0
     assert len(review_comments) == 0
 
-def test_fetch_all_data_for_repo_pr_without_number(mock_api_client: MagicMock, caplog):
+def test_fetch_all_data_for_repo_pr_without_number(mock_api_client: MagicMock, caplog: Any):
     """Test fetch_all_data_for_repo when a PR is missing the 'number' field."""
     repo_full_name = "test_owner/weird_repo"
     fetcher = GitHubFetcher(client=mock_api_client)
@@ -252,12 +252,12 @@ def test_fetch_all_data_for_repo_pr_without_number(mock_api_client: MagicMock, c
     mock_api_client.get_pull_requests.return_value = [pr_with_number, pr_without_number]
 
     # Adjust side effects for comments if necessary (only PR 101 should be processed for comments)
-    def get_issue_comments_side_effect(owner: str, repo: str, issue_number: int, since: Optional[str] = None):
+    def get_issue_comments_side_effect(owner: str, repo: str, issue_number: int, since: Optional[str] = None) -> List[Dict[str, Any]]:
         if issue_number == 101: return mock_issue_comments_pr101
         return [] # Should not be called for the PR without number
     mock_api_client.get_issue_comments.side_effect = get_issue_comments_side_effect
 
-    def get_review_comments_side_effect(owner: str, repo: str, pull_number: int, since: Optional[str] = None):
+    def get_review_comments_side_effect(owner: str, repo: str, pull_number: int, since: Optional[str] = None) -> List[Dict[str, Any]]:
         if pull_number == 101: return mock_review_comments_pr101
         return [] # Should not be called for the PR without number
     mock_api_client.get_review_comments.side_effect = get_review_comments_side_effect

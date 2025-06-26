@@ -6,7 +6,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 import yaml
 import logging
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 # ロギングの設定
 logger = logging.getLogger(__name__)
@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # プロジェクトのルートディレクトリを取得
-ROOT_DIR = Path(__file__).parent.parent.parent
+# This assumes settings.py is located at <ROOT_DIR>/src/config/settings.py
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 
 # 設定ファイルのパス
 CONFIG_FILE = ROOT_DIR / "config.yaml"
@@ -23,10 +24,11 @@ CONFIG_FILE = ROOT_DIR / "config.yaml"
 class Settings:
     def __init__(self):
         """設定の初期化"""
-        self.config: Dict[str, Any] = self._load_config()
-        self._validate_config()
+        config = self._load_config()
+        self._validate_config(config)
+        self.config: Dict[str, Any] = config  # type: ignore
 
-    def _load_config(self) -> Dict[str, Any]:
+    def _load_config(self) -> Optional[Dict[str, Any]]:
         """設定ファイルを読み込む"""
         try:
             with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
@@ -35,9 +37,12 @@ class Settings:
             logger.error(f"設定ファイルの読み込みに失敗しました: {e}")
             raise
 
-    def _validate_config(self):
+    def _validate_config(self, config: Optional[Dict[str, Any]]):
         """設定の検証"""
-        if not self.config.get('repositories'):
+        if config is None:
+            raise ValueError("設定ファイルの読み込みに失敗しました")
+
+        if not config.get('repositories'):
             raise ValueError("設定ファイルにリポジトリリストが定義されていません")
 
     @property

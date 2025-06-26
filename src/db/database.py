@@ -7,6 +7,7 @@ from sqlalchemy.orm import declarative_base
 from contextlib import contextmanager
 import logging
 import os
+from typing import Any
 
 # ロギングの設定
 logger = logging.getLogger(__name__)
@@ -17,14 +18,17 @@ Base = declarative_base()
 class Database:
     def __init__(self, config: dict[str, str]):
         """データベース接続の初期化"""
-        self.config = config
+        # Store the original config if needed elsewhere, but avoid modifying it.
+        # self.config = config
+
         # db_path を取得（なければデフォルト値）
-        db_path: str = self.config.get('db_path', 'github_data.db')
-        # self.config にもデフォルト値を反映させておく（後続処理で使う場合）
-        self.config['db_path'] = db_path
+        # Use .get from the original config for safety.
+        db_path_from_config: str = config.get('db_path', 'github_data.db')
+        self.resolved_db_path: str = db_path_from_config # Store resolved path separately
 
         # SQLiteファイルが格納されるディレクトリが存在しない場合は作成する
-        db_dir: str = os.path.dirname(db_path)
+        # Use self.resolved_db_path for directory creation and engine
+        db_dir: str = os.path.dirname(self.resolved_db_path)
         if db_dir and not os.path.exists(db_dir):
             os.makedirs(db_dir)
             logger.info(f"データベースディレクトリを作成しました: {db_dir}")
@@ -35,9 +39,8 @@ class Database:
         """SQLAlchemyエンジンの作成"""
         try:
             # SQLiteの接続文字列を使用
-            # configからdb_pathを取得 (__init__でデフォルト値が設定済み)
-            db_path: str = self.config['db_path']
-            connection_string = f"sqlite:///{db_path}"
+            # Use the resolved_db_path attribute
+            connection_string = f"sqlite:///{self.resolved_db_path}"
             logger.info(f"データベースに接続します: {connection_string}")
             return create_engine(connection_string)
         except Exception as e:
@@ -76,7 +79,7 @@ class Database:
             logger.error(f"テーブルの削除に失敗しました: {e}")
             raise
 
-    def get_repository_list(self) -> list[dict]:
+    def get_repository_list(self) -> list[dict[str, Any]]:
         """
         データベースからリポジトリのリストを取得します。
 
@@ -103,7 +106,7 @@ class Database:
             logger.error(f"リポジトリリストの取得中にエラーが発生しました: {e}")
             return []
 
-    def get_pull_requests_for_repository(self, repository_id: int) -> list[dict]:
+    def get_pull_requests_for_repository(self, repository_id: int) -> list[dict[str, Any]]:
         """
         指定されたリポジトリIDのプルリクエストリストをデータベースから取得します。
 
@@ -144,7 +147,7 @@ class Database:
             logger.error(f"プルリクエストの取得中にエラーが発生しました (リポジトリID: {repository_id}): {e}")
             return []
 
-    def get_review_comments_for_pr(self, pull_request_id: int) -> list[dict]:
+    def get_review_comments_for_pr(self, pull_request_id: int) -> list[dict[str, Any]]:
         """
         指定されたプルリクエストIDのレビューコメントリストをデータベースから取得します。
 
