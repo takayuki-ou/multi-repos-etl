@@ -9,7 +9,7 @@ from pathlib import Path
 # 元のコードに合わせてコメントアウトしておきます。
 # from sqlalchemy.orm import declarative_base
 from sqlalchemy import text # text をインポート
-from datetime import datetime # datetimeをインポート
+from datetime import datetime, timezone # datetimeとtimezoneをインポート
 
 # プロジェクトルートからの相対パスでschema.sqlを指定
 SCHEMA_PATH = os.path.join(os.path.dirname(__file__), '../../../src/db/schema.sql')
@@ -168,7 +168,7 @@ class TestDatabase:
 
     def test_get_repository_list_with_data(self, database):
         """データが存在する場合にリポジトリリストを正しく返すことをテスト"""
-        now_str = datetime.utcnow().isoformat()
+        now_str = datetime.now(timezone.utc).isoformat()
         repo_data = [
             (1, 'owner1', 'repo1', 'url1', now_str, now_str, now_str),
             (2, 'owner2', 'repo2', 'url2', now_str, now_str, now_str),
@@ -189,7 +189,7 @@ class TestDatabase:
 
     def test_get_pull_requests_no_prs(self, database):
         """リポジトリにPRがない場合に空のリストを返すことをテスト"""
-        now_str = datetime.utcnow().isoformat()
+        now_str = datetime.now(timezone.utc).isoformat()
         with database.get_session() as session:
             session.execute(text("""
                 INSERT INTO repositories (id, owner_login, name, url, created_at, updated_at, fetched_at)
@@ -200,7 +200,7 @@ class TestDatabase:
 
     def test_get_pull_requests_with_data(self, database):
         """リポジトリにPRがある場合に正しくPRリストを返すことをテスト"""
-        now_str = datetime.utcnow().isoformat()
+        now_str = datetime.now(timezone.utc).isoformat()
         repo_id = 1
         pr_data = [
             (101, repo_id, 1, 'PR Title 1', 'userA', 'open', now_str, now_str, None, None, 'Body 1', 'url_pr1', 'api1', now_str),
@@ -238,7 +238,7 @@ class TestDatabase:
 
     def test_get_review_comments_no_comments(self, database):
         """PRにコメントがない場合に空のリストを返すことをテスト"""
-        now_str = datetime.utcnow().isoformat()
+        now_str = datetime.now(timezone.utc).isoformat()
         with database.get_session() as session:
             session.execute(text("INSERT INTO repositories VALUES (1, 'o', 'n', 'u', :n, :n, :n)"), {'n': now_str})
             session.execute(text("""
@@ -251,7 +251,7 @@ class TestDatabase:
 
     def test_get_review_comments_with_data(self, database):
         """PRにコメントがある場合に正しくコメントリストを返すことをテスト"""
-        now_str = datetime.utcnow().isoformat()
+        now_str = datetime.now(timezone.utc).isoformat()
         pr_id = 202
         comments_data = [
             (301, pr_id, 'commenter1', 'This is a comment', now_str, now_str, 'api_c1', 'html_c1', now_str),

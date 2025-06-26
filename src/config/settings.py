@@ -38,6 +38,11 @@ class Settings:
 
     def _validate_config(self):
         """設定の検証"""
+        if self.config is None:
+            # 設定ファイルが読み込めなかった場合、後続の処理でエラーになるためここでは何もしない
+            # もしくは、特定の条件下でデフォルト設定を許容するならその処理を記述
+            return
+
         if not self.config.get('repositories'):
             raise ValueError("設定ファイルにリポジトリリストが定義されていません")
 
