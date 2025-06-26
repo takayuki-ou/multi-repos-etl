@@ -7,6 +7,7 @@ from sqlalchemy.orm import declarative_base
 from contextlib import contextmanager
 import logging
 import os
+from typing import Any
 
 # ロギングの設定
 logger = logging.getLogger(__name__)
@@ -78,7 +79,7 @@ class Database:
             logger.error(f"テーブルの削除に失敗しました: {e}")
             raise
 
-    def get_repository_list(self) -> list[dict]:
+    def get_repository_list(self) -> list[dict[str, Any]]:
         """
         データベースからリポジトリのリストを取得します。
 
@@ -105,7 +106,7 @@ class Database:
             logger.error(f"リポジトリリストの取得中にエラーが発生しました: {e}")
             return []
 
-    def get_pull_requests_for_repository(self, repository_id: int) -> list[dict]:
+    def get_pull_requests_for_repository(self, repository_id: int) -> list[dict[str, Any]]:
         """
         指定されたリポジトリIDのプルリクエストリストをデータベースから取得します。
 
@@ -146,7 +147,7 @@ class Database:
             logger.error(f"プルリクエストの取得中にエラーが発生しました (リポジトリID: {repository_id}): {e}")
             return []
 
-    def get_review_comments_for_pr(self, pull_request_id: int) -> list[dict]:
+    def get_review_comments_for_pr(self, pull_request_id: int) -> list[dict[str, Any]]:
         """
         指定されたプルリクエストIDのレビューコメントリストをデータベースから取得します。
 

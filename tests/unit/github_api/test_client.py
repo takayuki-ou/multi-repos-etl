@@ -6,7 +6,7 @@ from unittest.mock import patch, MagicMock
 from datetime import datetime
 import requests
 import logging
-from typing import Any, List, Dict
+from typing import Any
 from src.github_api.client import GitHubAPIClient
 from tests.mocks.github_api.settings import create_mock_settings
 from tests.mocks.github_api.responses import create_mock_response, create_error_response

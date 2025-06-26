@@ -1,16 +1,20 @@
 """
 Streamlit GUI for GitHub PR Analysis Dashboard
 """
-import streamlit as st
+try:
+    import streamlit as st
+except ImportError:
+    st = None  # Handle missing streamlit gracefully
 from src.gui.data_manager import DataManager
 import logging
 from datetime import datetime
+from typing import Optional, List, Dict, Any, Tuple
 
 # ロギングの設定
 logger = logging.getLogger(__name__)
 
 # Helper functions for Streamlit UI elements
-def display_sidebar(data_manager: DataManager) -> tuple[Optional[list[dict]], Optional[str], Optional[dict]]:
+def display_sidebar(data_manager: DataManager) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str], Optional[Dict[str, Any]]]:
     """Displays the sidebar for repository selection and returns selected repo info."""
     st.sidebar.header("Repositories")
     repositories, error_msg = data_manager.get_repositories()
@@ -33,7 +37,7 @@ def display_sidebar(data_manager: DataManager) -> tuple[Optional[list[dict]], Op
     return repositories, None, None # Return selected_repo_name and data as None if not selected
 
 
-def display_pr_filters(all_pull_requests: list[dict]) -> tuple[list[str], Optional[datetime.date], Optional[datetime.date]]:
+def display_pr_filters(all_pull_requests: List[Dict[str, Any]]) -> Tuple[List[str], Optional[datetime.date], Optional[datetime.date]]:
     """Displays PR filters and returns selected filter values."""
     with st.expander("Filter Pull Requests", expanded=True):
         available_states = sorted(list(set(pr['state'] for pr in all_pull_requests if pr.get('state'))))
@@ -51,11 +55,11 @@ def display_pr_filters(all_pull_requests: list[dict]) -> tuple[list[str], Option
 
 
 def apply_filters(
-    all_pull_requests: list[dict],
-    selected_states: list[str],
+    all_pull_requests: List[Dict[str, Any]],
+    selected_states: List[str],
     start_date: Optional[datetime.date],
     end_date: Optional[datetime.date]
-) -> list[dict]:
+) -> List[Dict[str, Any]]:
     """Applies filters to the list of pull requests."""
     filtered_prs = all_pull_requests
     if selected_states:
@@ -67,7 +71,7 @@ def apply_filters(
     return filtered_prs
 
 
-def display_pr_list_and_get_selection(filtered_prs: list[dict]) -> Optional[dict]:
+def display_pr_list_and_get_selection(filtered_prs: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """Displays the list of PRs and returns the selected PR for detail view."""
     df_display_pr = [{
         "Number": pr["number"], "Title": pr["title"], "Author": pr["user_login"],
@@ -86,7 +90,7 @@ def display_pr_list_and_get_selection(filtered_prs: list[dict]) -> Optional[dict
     return None
 
 
-def display_pr_details(selected_pr_data: dict, data_manager: DataManager):
+def display_pr_details(selected_pr_data: Dict[str, Any], data_manager: DataManager):
     """Displays the details of a selected pull request."""
     st.subheader("PR Details")
     st.markdown(f"### {selected_pr_data['title']} (#{selected_pr_data['number']})")
@@ -121,6 +125,10 @@ def main():
     """
     Streamlitアプリケーションのメイン関数
     """
+    if st is None:
+        print("Streamlit is not installed. Please install it with: pip install streamlit")
+        return
+
     st.set_page_config(layout="wide", page_title="GitHub PR Analysis Dashboard")
     st.title("GitHub PR Analysis Dashboard")
 

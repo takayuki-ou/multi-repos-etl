@@ -54,8 +54,8 @@ class DataManager:
         """
         try:
             repos = self.db.get_repository_list()
-            if repos is None: # Should not happen with current db.get_repository_list which returns [] on error
-                return None, "Failed to retrieve repositories: unknown database error."
+            if not repos: # Check if empty list instead of None
+                return [], None
             return repos, None
         except Exception as e:
             logger.error(f"Error getting repositories: {e}", exc_info=True)
@@ -68,10 +68,10 @@ class DataManager:
         """
         try:
             prs_raw = self.db.get_pull_requests_for_repository(repository_id)
-            if prs_raw is None: # Should not happen
-                return None, f"Failed to retrieve pull requests for repository ID {repository_id}: unknown database error."
+            if not prs_raw: # Check if empty list instead of None
+                return [], None
 
-            parsed_prs = []
+            parsed_prs: List[Dict[str, Any]] = []
             for pr_data in prs_raw:
                 pr_data['created_at_dt'] = _parse_datetime_string(pr_data.get('created_at'))
                 pr_data['updated_at_dt'] = _parse_datetime_string(pr_data.get('updated_at'))
@@ -89,10 +89,10 @@ class DataManager:
         """
         try:
             comments_raw = self.db.get_review_comments_for_pr(pr_db_id)
-            if comments_raw is None: # Should not happen
-                return None, f"Failed to retrieve comments for PR ID {pr_db_id}: unknown database error."
+            if not comments_raw: # Check if empty list instead of None
+                return [], None
 
-            parsed_comments = []
+            parsed_comments: List[Dict[str, Any]] = []
             for comment_data in comments_raw:
                 comment_data['created_at_dt'] = _parse_datetime_string(comment_data.get('created_at'))
                 # updated_at for comments if available and needed

@@ -6,7 +6,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 import yaml
 import logging
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 # ロギングの設定
 logger = logging.getLogger(__name__)
@@ -24,10 +24,11 @@ CONFIG_FILE = ROOT_DIR / "config.yaml"
 class Settings:
     def __init__(self):
         """設定の初期化"""
-        self.config: Dict[str, Any] = self._load_config()
-        self._validate_config()
+        config = self._load_config()
+        self._validate_config(config)
+        self.config: Dict[str, Any] = config  # type: ignore
 
-    def _load_config(self) -> Dict[str, Any]:
+    def _load_config(self) -> Optional[Dict[str, Any]]:
         """設定ファイルを読み込む"""
         try:
             with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
@@ -36,14 +37,12 @@ class Settings:
             logger.error(f"設定ファイルの読み込みに失敗しました: {e}")
             raise
 
-    def _validate_config(self):
+    def _validate_config(self, config: Optional[Dict[str, Any]]):
         """設定の検証"""
-        if self.config is None:
-            # 設定ファイルが読み込めなかった場合、後続の処理でエラーになるためここでは何もしない
-            # もしくは、特定の条件下でデフォルト設定を許容するならその処理を記述
-            return
+        if config is None:
+            raise ValueError("設定ファイルの読み込みに失敗しました")
 
-        if not self.config.get('repositories'):
+        if not config.get('repositories'):
             raise ValueError("設定ファイルにリポジトリリストが定義されていません")
 
     @property
