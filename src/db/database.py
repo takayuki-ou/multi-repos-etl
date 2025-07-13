@@ -1,19 +1,19 @@
 """
 データベース接続とセッション管理を行うモジュール
 """
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker, scoped_session
+from sqlalchemy import create_engine, text, Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy.orm import sessionmaker, scoped_session, relationship
 from sqlalchemy.orm import declarative_base
 from contextlib import contextmanager
 import logging
 import os
 from typing import Any
+from src.db.models import Base, Repository, PullRequest, ReviewComment, User
 
 # ロギングの設定
 logger = logging.getLogger(__name__)
 
 # ベースクラスの作成
-Base = declarative_base()
 
 class Database:
     def __init__(self, config: dict[str, str]):

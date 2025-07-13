@@ -24,7 +24,7 @@ class GitHubAPIClient:
         """初期化"""
         self.settings = settings
         self.headers = self.HEADERS.copy()
-        self.headers["Authorization"] = f"token {settings.github_token}"
+        self.headers["Authorization"] = f"token {settings.github_pat}"
         self.rate_limit_remaining = None
         self.rate_limit_reset = None
 

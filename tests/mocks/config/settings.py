@@ -9,7 +9,7 @@ def create_mock_env_vars() -> Generator[None, None, None]:
     with patch.dict(os.environ, {}, clear=True):
         # 新しい環境変数を設定
         with patch.dict(os.environ, {
-            'GITHUB_TOKEN': 'test_token',
+            'GITHUB_PAT': 'test_token',
             'DB_HOST': 'test_host',
             'DB_PORT': '5432',
             'DB_NAME': 'test_db',
