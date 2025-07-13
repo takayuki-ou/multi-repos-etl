@@ -53,9 +53,9 @@ pip install -r requirements.txt
 4. 環境変数の設定:
 `.env`ファイルを作成し、少なくとも以下の内容を設定します:
 ```
-GITHUB_TOKEN=your_github_personal_access_token
+GITHUB_PAT=your_github_personal_access_token
 ```
-`GITHUB_TOKEN` はGitHub APIからデータを取得するために必須です。
+`GITHUB_PAT` はGitHub APIからデータを取得するために必須です。
 
 5. 設定ファイルの編集:
 `config.yaml`を編集して、分析対象のリポジトリやデータベースのパスを設定します。
@@ -100,7 +100,7 @@ logging:
 
 1.  **設定**:
     *   `config.yaml`に対象リポジトリと`db_path`（SQLiteデータベースファイルへのパス）を設定します。
-    *   `.env`ファイルに`GITHUB_TOKEN`を設定します。
+    *   `.env`ファイルに`GITHUB_PAT`を設定します。
 
 2.  **データ収集**:
     *   （現時点では、このリポジトリに汎用的なデータ収集スクriptは同梱されていません）
@@ -116,7 +116,7 @@ logging:
 
 ## 注意事項
 - `config.yaml`内のリポジトリ名は `owner/repository_name` の形式で正しく指定してください。
-- `GITHUB_TOKEN`には、対象リポジトリへのアクセス権限（`repo`スコープなど）が必要です。
+- `GITHUB_PAT`には、対象リポジトリへのアクセス権限（`repo`スコープなど）が必要です。
 - 現状、`Settings`クラス内にはPostgreSQL接続用の設定 (`db_config`プロパティ) も残っていますが、SQLiteを主として利用する場合、`config.yaml`の`db_path`が主に参照されます。
 
 ## 出力例（GUI）

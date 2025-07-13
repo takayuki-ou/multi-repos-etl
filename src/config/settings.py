@@ -51,9 +51,9 @@ class Settings:
         return self.config.get('repositories', [])
 
     @property
-    def github_token(self) -> str:
+    def github_pat(self) -> str:
         """GitHub Personal Access Tokenを取得"""
-        token = os.getenv('GITHUB_TOKEN')
+        token = os.getenv('GITHUB_PAT')
         if not token:
             raise ValueError("GitHub Personal Access Tokenが設定されていません")
         return token

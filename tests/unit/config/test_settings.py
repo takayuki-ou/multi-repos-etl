@@ -28,13 +28,13 @@ def test_settings_initialization(mock_env_vars: Any, mock_config_file: str) -> N
     """Settingsクラスの初期化テスト"""
     with patch('builtins.open', mock_open(read_data=mock_config_file)):
         settings = Settings()
-        
+
         # リポジトリリストの確認
         assert settings.repositories == ['owner1/repo1', 'owner2/repo2']
-        
+
         # GitHubトークンの確認
-        assert settings.github_token == 'test_token'
-        
+        assert settings.github_pat == 'test_token'
+
         # データベース設定の確認
         db_config = settings.db_config
         assert db_config['host'] == 'test_host'
@@ -42,19 +42,19 @@ def test_settings_initialization(mock_env_vars: Any, mock_config_file: str) -> N
         assert db_config['database'] == 'test_db'
         assert db_config['user'] == 'test_user'
         assert db_config['password'] == 'test_password'
-        
+
         # フェッチ設定の確認
         fetch_settings = settings.fetch_settings
         assert fetch_settings['initial_lookback_days'] == 30
         assert fetch_settings['max_prs_per_request'] == 100
         assert fetch_settings['request_interval'] == 1
 
-def test_missing_github_token() -> None:
+def test_missing_github_pat() -> None:
     """GitHubトークンが設定されていない場合のテスト"""
     with patch.dict(os.environ, {}, clear=True):
         settings = Settings()
         with pytest.raises(ValueError, match="GitHub Personal Access Tokenが設定されていません"):
-            _ = settings.github_token
+            _ = settings.github_pat
 
 def test_invalid_config_file() -> None:
     """無効な設定ファイルのテスト"""
@@ -66,4 +66,4 @@ def test_missing_repositories() -> None:
     """リポジトリリストが設定されていない場合のテスト"""
     with patch('builtins.open', mock_open(read_data=create_missing_repositories_config_file())):
         with pytest.raises(ValueError, match="設定ファイルにリポジトリリストが定義されていません"):
-            Settings() 
+            Settings()

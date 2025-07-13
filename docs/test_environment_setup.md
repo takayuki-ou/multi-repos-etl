@@ -60,14 +60,14 @@ class MockGitHubClient:
     def __init__(self):
         self.mock = Mock()
         self.setup_mock_responses()
-    
+
     def setup_mock_responses(self):
         self.mock.get_pull_requests.return_value = [MOCK_PR_RESPONSE]
         self.mock.get_review_comments.return_value = [MOCK_COMMENT_RESPONSE]
-        
+
     def get_pull_requests(self, repo, state=None):
         return self.mock.get_pull_requests(repo, state)
-        
+
     def get_review_comments(self, repo, pr_number):
         return self.mock.get_review_comments(repo, pr_number)
 ```
@@ -133,15 +133,15 @@ from .data.sample_data import SAMPLE_PRS, SAMPLE_COMMENTS
 
 def init_test_database():
     db_path = os.path.join(os.path.dirname(__file__), 'data', 'test.db')
-    
+
     # データベース接続
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
+
     # スキーマの適用
     with open('src/db/schema.sql', 'r') as f:
         cursor.executescript(f.read())
-    
+
     # サンプルデータの投入
     for pr in SAMPLE_PRS:
         cursor.execute("""
@@ -154,7 +154,7 @@ def init_test_database():
             pr['created_at'], pr['updated_at'],
             pr['body'], pr['user']['login'], pr['html_url']
         ))
-    
+
     for comment in SAMPLE_COMMENTS:
         cursor.execute("""
             INSERT INTO review_comments (
@@ -165,7 +165,7 @@ def init_test_database():
             comment['user']['login'],
             comment['created_at'], comment['html_url']
         ))
-    
+
     conn.commit()
     conn.close()
 ```
@@ -195,7 +195,7 @@ logging:
 ### 4.2 テスト用環境変数
 ```bash
 # tests/integration/config/test.env
-GITHUB_TOKEN=test_token
+GITHUB_PAT=test_token
 TEST_MODE=true
 DB_PATH=tests/integration/db/data/test.db
 ```
@@ -212,16 +212,16 @@ from integration.db.init_db import init_test_database
 def setup_test_environment():
     # ディレクトリ作成
     os.makedirs('tests/integration/logs', exist_ok=True)
-    
+
     # データベース初期化
     init_test_database()
-    
+
     # 設定ファイルのコピー
     shutil.copy(
         'tests/integration/config/test_config.yaml',
         'config.yaml'
     )
-    
+
     # 環境変数の設定
     with open('tests/integration/config/test.env', 'r') as f:
         for line in f:
@@ -276,4 +276,4 @@ python tests/utils/setup_test_env.py
    - `tests/integration/config/test.env`
 
 5. ログディレクトリが作成されているか
-   - `tests/integration/logs/` 
+   - `tests/integration/logs/`
