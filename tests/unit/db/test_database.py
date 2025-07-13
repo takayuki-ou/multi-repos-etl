@@ -143,9 +143,16 @@ class TestDatabase:
         mock_session.close.assert_called_once()
 
     def test_create_tables(self, database: Database, mocker: Any, db_config: Dict[str, str]) -> None:
-        """テーブル作成のテスト"""
+        """テーブル作成のテスト（ORMモデルがBase.metadataに登録されていることも確認）"""
         # Base.metadata.create_all が呼ばれることを確認
         mock_metadata = mocker.patch.object(Base, 'metadata')
+        # ORMモデルがBase.metadataに登録されていることを確認
+        from src.db.models import Repository, PullRequest, ReviewComment, User
+        tables = set(Base.metadata.tables.keys())
+        assert 'repositories' in tables
+        assert 'pull_requests' in tables
+        assert 'review_comments' in tables
+        assert 'users' in tables
         # We test create_tables method directly, not its effect on schema (handled by fixture)
         db_instance_for_mock_test = Database(db_config) # Use a separate instance for this mock test
         db_instance_for_mock_test.create_tables()
