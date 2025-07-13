@@ -17,6 +17,23 @@ logger = logging.getLogger(__name__)
 def display_sidebar(data_manager: DataManager) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str], Optional[Dict[str, Any]]]:
     """Displays the sidebar for repository selection and returns selected repo info."""
     st.sidebar.header("Repositories")
+
+    # DBにデータ投入ボタン
+    st.sidebar.subheader("データ管理")
+    if st.sidebar.button("🔄 DBにデータ投入", help="GitHub APIからデータを取得してDBに保存します"):
+        with st.sidebar:
+            with st.spinner("データを取得・保存中..."):
+                success, message = data_manager.fetch_and_store_all_data()
+
+            if success:
+                st.success(f"✅ {message}")
+                # データが更新されたので、ページをリフレッシュするためのヒントを表示
+                st.info("💡 データが更新されました。リポジトリリストが更新されるまで少しお待ちください。")
+            else:
+                st.error(f"❌ {message}")
+
+    st.sidebar.markdown("---")
+
     repositories, error_msg = data_manager.get_repositories()
 
     if error_msg:
