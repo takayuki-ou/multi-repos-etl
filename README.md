@@ -69,8 +69,10 @@ repositories:
 
 # SQLiteデータベースファイルのパス
 # 絶対パスまたはプロジェクトルートからの相対パスで指定
-db_path: github_data.db
-# 例: data/my_prs.db
+database:
+  db_path: github_data.db
+# 例: database:
+#         db_path: data/my_prs.db
 
 # データ取得設定 (データ取得スクリプト用)
 fetch_settings:

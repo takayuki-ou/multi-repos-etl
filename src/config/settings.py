@@ -76,8 +76,11 @@ class Settings:
 
     @property
     def sqlite_db_path(self) -> str:
-        """SQLiteデータベースファイルのパスを取得"""
-        db_path_str = self.config.get('db_path', 'github_data.db')
+        """SQLiteデータベースファイルのパスを取得（databaseセクション対応）"""
+        db_path_str = (
+            (self.config.get('database', {}).get('db_path') if self.config.get('database') else None)
+            or 'github_data.db'
+        )
         db_path = Path(db_path_str)
         if not db_path.is_absolute():
             db_path = (ROOT_DIR / db_path).resolve()

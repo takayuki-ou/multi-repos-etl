@@ -151,6 +151,21 @@ class TestDatabase:
         db_instance_for_mock_test.create_tables()
         mock_metadata.create_all.assert_called_once_with(db_instance_for_mock_test.engine)
 
+    def test_create_tables_creates_all_tables(self, tmp_path):
+        """ORM定義に基づき全テーブルが作成されることをテスト"""
+        db_path = tmp_path / "test_create_tables.db"
+        db = Database({'db_path': str(db_path)})
+        db.create_tables()
+        # SQLiteのメタデータを直接確認
+        import sqlite3
+        con = sqlite3.connect(str(db_path))
+        cur = con.cursor()
+        # repositories, pull_requests, review_comments, users テーブルが存在すること
+        for table in ["repositories", "pull_requests", "review_comments", "users"]:
+            cur.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table}'")
+            assert cur.fetchone() is not None, f"{table} テーブルが作成されていません"
+        con.close()
+
     def test_drop_tables(self, database: Database, mocker: Any, db_config: Dict[str, str]) -> None:
         """テーブル削除のテスト"""
         # Base.metadata.drop_all が呼ばれることを確認
