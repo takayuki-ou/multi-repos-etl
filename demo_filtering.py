@@ -54,7 +54,12 @@ def demo_filtering():
         logger.info(f"作成者数: {len(authors)}")
         logger.info(f"作成者: {', '.join(authors[:5])}")  # 最初の5人を表示
         
-        # 3. 日付範囲フィルタ
+        # 3. ステータス（GitHubの仕様上、openとclosedの2択）
+        logger.info("\n=== ステータス（固定値） ===")
+        available_statuses = ['open', 'closed']
+        logger.info(f"利用可能なステータス: {', '.join(available_statuses)}")
+        
+        # 4. 日付範囲フィルタ
         if prs:
             logger.info("\n=== 日付範囲フィルタ ===")
             start_date = datetime(2023, 1, 1)
@@ -69,7 +74,7 @@ def demo_filtering():
             
             logger.info(f"2023年のPR数: {len(filtered_prs)}")
         
-        # 4. 作成者フィルタ
+        # 5. 作成者フィルタ
         if authors:
             logger.info("\n=== 作成者フィルタ ===")
             target_author = authors[0]
@@ -83,9 +88,24 @@ def demo_filtering():
             
             logger.info(f"{target_author}のPR数: {len(author_prs)}")
         
-        # 5. 複合フィルタ
+        # 6. ステータスフィルタ（リードタイム分析用）
+        logger.info("\n=== ステータスフィルタ（closed PRのみ） ===")
+        
+        closed_prs, error = data_manager.get_pull_requests_with_lead_time_data(
+            repo_id, status='closed'
+        )
+        if error:
+            logger.error(f"ステータスフィルタPR取得エラー: {error}")
+            return
+        
+        logger.info(f"closedなPR数: {len(closed_prs)}")
+        if closed_prs:
+            for pr in closed_prs[:3]:  # 最初の3件を表示
+                logger.info(f"  PR#{pr['number']}: {pr['title']} by {pr['user_login']} ({pr['state']})")
+        
+        # 7. 複合フィルタ（日付範囲 + 作成者 + ステータス）
         if authors and prs:
-            logger.info("\n=== 複合フィルタ（日付範囲 + 作成者） ===")
+            logger.info("\n=== 複合フィルタ（日付範囲 + 作成者 + ステータス） ===")
             start_date = datetime(2023, 1, 1)
             end_date = datetime(2023, 12, 31)
             target_author = authors[0]
@@ -94,13 +114,14 @@ def demo_filtering():
                 repo_id, 
                 start_date=start_date, 
                 end_date=end_date, 
-                author=target_author
+                author=target_author,
+                status='closed'
             )
             if error:
                 logger.error(f"複合フィルタPR取得エラー: {error}")
                 return
             
-            logger.info(f"2023年の{target_author}のPR数: {len(combined_prs)}")
+            logger.info(f"2023年の{target_author}のclosedなPR数: {len(combined_prs)}")
         
         logger.info("\n=== フィルタリング機能デモ完了 ===")
         
