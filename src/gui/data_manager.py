@@ -122,6 +122,24 @@ class DataManager:
             Tuple[List[Dict], Optional[str]]: (PRデータリスト, エラーメッセージ)
         """
         try:
+            # フィルタ条件の検証
+            is_valid, validation_error = self.validate_filter_combination(start_date, end_date, author)
+            if not is_valid:
+                logger.warning(f"フィルタ条件が無効です: {validation_error}")
+                return [], validation_error
+            
+            # フィルタ条件をログに記録
+            filter_conditions = []
+            if start_date:
+                filter_conditions.append(f"開始日: {start_date.strftime('%Y-%m-%d')}")
+            if end_date:
+                filter_conditions.append(f"終了日: {end_date.strftime('%Y-%m-%d')}")
+            if author:
+                filter_conditions.append(f"作成者: {author}")
+            
+            if filter_conditions:
+                logger.info(f"フィルタ条件を適用してPRを取得（ANDロジック）: {', '.join(filter_conditions)}")
+            
             prs_raw = self.db.get_pull_requests_with_filters(
                 repository_id=repository_id,
                 start_date=start_date,
@@ -130,7 +148,14 @@ class DataManager:
             )
             
             if not prs_raw:
-                return [], None
+                # フィルタ結果が空の場合の詳細なメッセージ生成
+                if filter_conditions:
+                    filter_msg = ', '.join(filter_conditions)
+                    logger.info(f"フィルタ条件に一致するPRが見つかりませんでした: {filter_msg}")
+                    return [], f"指定された条件（{filter_msg}）に一致するプルリクエストが見つかりませんでした。"
+                else:
+                    logger.info("リポジトリにPRが存在しません")
+                    return [], "このリポジトリにはプルリクエストが存在しません。"
 
             parsed_prs: List[Dict[str, Any]] = []
             for pr_data in prs_raw:
@@ -141,7 +166,8 @@ class DataManager:
                 pr_data['merged_at_dt'] = _parse_datetime_string(pr_data.get('merged_at'))
                 
                 parsed_prs.append(pr_data)
-                
+            
+            logger.info(f"フィルタ条件に一致するPRを{len(parsed_prs)}件取得しました")
             return parsed_prs, None
             
         except Exception as e:
@@ -164,6 +190,44 @@ class DataManager:
         except Exception as e:
             logger.error(f"Error getting authors for repo ID {repository_id}: {e}", exc_info=True)
             return [], f"Database error while fetching authors: {e}"
+
+    def validate_filter_combination(self, start_date: Optional[datetime] = None,
+                                  end_date: Optional[datetime] = None,
+                                  author: Optional[str] = None) -> Tuple[bool, Optional[str]]:
+        """
+        フィルタ条件の組み合わせを検証します
+        
+        Args:
+            start_date: 開始日
+            end_date: 終了日
+            author: 作成者
+            
+        Returns:
+            Tuple[bool, Optional[str]]: (検証結果, エラーメッセージ)
+        """
+        try:
+            # 日付範囲の検証
+            if start_date and end_date:
+                if start_date > end_date:
+                    return False, "開始日は終了日より前の日付を指定してください。"
+                
+                # 日付範囲が極端に長い場合の警告（例：5年以上）
+                date_diff = end_date - start_date
+                if date_diff.days > 1825:  # 5年
+                    logger.warning(f"非常に長い期間が指定されました: {date_diff.days}日")
+            
+            # 作成者名の検証（基本的なサニタイゼーション）
+            if author:
+                if len(author.strip()) == 0:
+                    return False, "作成者名が空です。"
+                if len(author) > 100:  # 合理的な長さ制限
+                    return False, "作成者名が長すぎます。"
+            
+            return True, None
+            
+        except Exception as e:
+            logger.error(f"フィルタ条件の検証中にエラーが発生しました: {e}", exc_info=True)
+            return False, f"フィルタ条件の検証中にエラーが発生しました: {e}"
 
     def fetch_and_store_all_data(self) -> Tuple[bool, str]:
         """

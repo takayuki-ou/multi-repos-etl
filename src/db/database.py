@@ -432,6 +432,7 @@ class Database:
                                      author: str = None) -> list[dict[str, Any]]:
         """
         フィルタリング条件に基づいてプルリクエストを取得します。
+        複数のフィルタはANDロジックで組み合わせられます。
         
         Args:
             repository_id (int): リポジトリID
@@ -444,6 +445,11 @@ class Database:
         """
         logger.info(f"フィルタ付きプルリクエスト取得開始 - リポジトリID: {repository_id}")
         
+        # フィルタ条件の検証
+        if start_date and end_date and start_date > end_date:
+            logger.warning("開始日が終了日より後に設定されています")
+            return []
+        
         try:
             with self.get_session() as session:
                 # ベースクエリ
@@ -455,24 +461,33 @@ class Database:
                 """]
                 
                 params = {"repo_id": repository_id}
+                filter_descriptions = []
                 
-                # 日付範囲フィルタ
+                # 日付範囲フィルタ（ANDロジック）
                 if start_date:
                     query_parts.append("AND created_at >= :start_date")
                     params["start_date"] = start_date.isoformat()
+                    filter_descriptions.append(f"開始日 >= {start_date.strftime('%Y-%m-%d')}")
                     
                 if end_date:
                     query_parts.append("AND created_at <= :end_date")
                     params["end_date"] = end_date.isoformat()
+                    filter_descriptions.append(f"終了日 <= {end_date.strftime('%Y-%m-%d')}")
                 
-                # 作成者フィルタ
+                # 作成者フィルタ（ANDロジック）
                 if author:
                     query_parts.append("AND user_login = :author")
                     params["author"] = author
+                    filter_descriptions.append(f"作成者 = {author}")
                 
                 query_parts.append("ORDER BY created_at DESC")
                 
                 final_query = " ".join(query_parts)
+                
+                # フィルタ条件をログに記録
+                if filter_descriptions:
+                    logger.info(f"適用されるフィルタ条件（ANDロジック）: {' AND '.join(filter_descriptions)}")
+                
                 result = session.execute(text(final_query), params)
                 
                 pull_requests = [
@@ -492,6 +507,11 @@ class Database:
                 ]
                 
                 logger.info(f"{len(pull_requests)}件のフィルタされたプルリクエストを取得しました")
+                
+                # 結果が空の場合の詳細ログ
+                if not pull_requests and filter_descriptions:
+                    logger.info(f"フィルタ条件に一致するPRが見つかりませんでした: {' AND '.join(filter_descriptions)}")
+                
                 return pull_requests
                 
         except Exception as e:

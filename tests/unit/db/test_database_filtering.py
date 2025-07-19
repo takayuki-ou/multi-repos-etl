@@ -204,6 +204,58 @@ class TestDatabaseFiltering:
             assert 'ORDER BY user_login' in query_text
             assert params['repo_id'] == 1
 
+    def test_get_pull_requests_with_filters_invalid_date_range(self, mock_database):
+        """無効な日付範囲のテスト"""
+        db = mock_database
+        
+        start_date = datetime(2023, 12, 31)
+        end_date = datetime(2023, 1, 1)  # 開始日が終了日より後
+        
+        # テスト実行
+        result = db.get_pull_requests_with_filters(
+            repository_id=1,
+            start_date=start_date,
+            end_date=end_date
+        )
+        
+        # 検証
+        assert result == []
+
+    def test_get_pull_requests_with_filters_empty_result_with_filters(self, mock_database):
+        """フィルタ適用時の空結果テスト"""
+        db = mock_database
+        
+        mock_session = Mock()
+        mock_result = Mock()
+        mock_result.__iter__ = Mock(return_value=iter([]))
+        mock_session.execute.return_value = mock_result
+        
+        with patch.object(db, 'get_session') as mock_get_session:
+            mock_get_session.return_value.__enter__.return_value = mock_session
+            mock_get_session.return_value.__exit__.return_value = None
+            
+            # テスト実行
+            result = db.get_pull_requests_with_filters(
+                repository_id=1,
+                start_date=datetime(2023, 1, 1),
+                end_date=datetime(2023, 12, 31),
+                author='nonexistent_user'
+            )
+            
+            # 検証
+            assert result == []
+            
+            # 正しいクエリが実行されたことを確認（ANDロジック）
+            call_args = mock_session.execute.call_args
+            query_text = str(call_args[0][0])
+            params = call_args[0][1]
+            
+            assert 'repository_id = :repo_id' in query_text
+            assert 'created_at >= :start_date' in query_text
+            assert 'created_at <= :end_date' in query_text
+            assert 'user_login = :author' in query_text
+            assert params['author'] == 'nonexistent_user'
+
     def test_get_pull_requests_with_filters_database_error(self, mock_database):
         """データベースエラー時のテスト"""
         db = mock_database
