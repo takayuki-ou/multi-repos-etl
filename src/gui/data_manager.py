@@ -229,34 +229,55 @@ class DataManager:
             logger.error(f"フィルタ条件の検証中にエラーが発生しました: {e}", exc_info=True)
             return False, f"フィルタ条件の検証中にエラーが発生しました: {e}"
 
-    def fetch_and_store_all_data(self) -> Tuple[bool, str]:
+    def fetch_and_store_all_data(self, progress_callback=None) -> Tuple[bool, str]:
         """
         GitHub APIからすべてのリポジトリのデータを取得し、DBに保存します。
+
+        Args:
+            progress_callback: 進行状況を通知するコールバック関数
+                              callback(message: str, level: str, progress: float)
+                              level: 'info', 'warning', 'error'
+                              progress: 0.0-1.0の進行率
 
         Returns:
             Tuple[bool, str]: (成功フラグ, メッセージ)
         """
-        logger.info("データ取得・DB投入処理を開始します")
+        def log_and_callback(message: str, level: str = 'info', progress: float = None):
+            """ログ出力とコールバック呼び出しを同時に行う"""
+            if level == 'info':
+                logger.info(message)
+            elif level == 'warning':
+                logger.warning(message)
+            elif level == 'error':
+                logger.error(message)
+            
+            if progress_callback:
+                progress_callback(message, level, progress)
+
+        log_and_callback("データ取得・DB投入処理を開始します", 'info', 0.0)
 
         try:
             # GitHub APIクライアントとフェッチャーを初期化
+            log_and_callback("GitHub APIクライアントを初期化中...", 'info', 0.1)
             client = GitHubAPIClient(self.settings)
             fetcher = GitHubFetcher(client)
 
             success_count = 0
             error_count = 0
             error_messages = []
+            total_repos = len(self.settings.repositories)
 
             # 設定されたリポジトリを処理
-            for repo_full_name in self.settings.repositories:
+            for i, repo_full_name in enumerate(self.settings.repositories):
                 try:
-                    logger.info(f"リポジトリ {repo_full_name} のデータ取得を開始")
+                    base_progress = 0.1 + (i / total_repos) * 0.8
+                    log_and_callback(f"リポジトリ {repo_full_name} のデータ取得を開始", 'info', base_progress)
 
                     # owner/repo を分離
                     owner, repo_name = repo_full_name.split('/')
 
                     # まずリポジトリ情報を取得・保存
-                    # 簡易的にGitHub APIから基本情報を取得
+                    log_and_callback(f"リポジトリ {repo_full_name} の基本情報を取得中...", 'info', base_progress + 0.1/total_repos)
                     import requests
                     repo_url = f"https://api.github.com/repos/{repo_full_name}"
                     repo_response = requests.get(repo_url, headers=client.headers)
@@ -265,31 +286,38 @@ class DataManager:
 
                     # リポジトリ情報をUPSERT
                     if not self.db.upsert_repository(repo_data):
-                        error_messages.append(f"リポジトリ {repo_full_name} の保存に失敗")
+                        error_msg = f"リポジトリ {repo_full_name} の保存に失敗"
+                        log_and_callback(error_msg, 'error')
+                        error_messages.append(error_msg)
                         error_count += 1
                         continue
 
                     # DBからリポジトリIDを取得
                     db_repo = self.db.get_repository_by_full_name(owner, repo_name)
                     if not db_repo:
-                        error_messages.append(f"リポジトリ {repo_full_name} のDB ID取得に失敗")
+                        error_msg = f"リポジトリ {repo_full_name} のDB ID取得に失敗"
+                        log_and_callback(error_msg, 'error')
+                        error_messages.append(error_msg)
                         error_count += 1
                         continue
 
                     repository_id = db_repo['id']
 
                     # プルリクエスト、Issueコメント、レビューコメントを取得
+                    log_and_callback(f"リポジトリ {repo_full_name} のPRとコメントを取得中...", 'info', base_progress + 0.3/total_repos)
                     pull_requests, _, review_comments = fetcher.fetch_all_data_for_repo(repo_full_name)
 
                     # プルリクエストをUPSERT
+                    log_and_callback(f"プルリクエスト {len(pull_requests)}件を保存中...", 'info', base_progress + 0.5/total_repos)
                     pr_count = 0
                     for pr_data in pull_requests:
                         if self.db.upsert_pull_request(pr_data, repository_id):
                             pr_count += 1
                         else:
-                            logger.warning(f"PR #{pr_data.get('number')} の保存に失敗")
+                            log_and_callback(f"PR #{pr_data.get('number')} の保存に失敗", 'warning')
 
                     # レビューコメントをUPSERT
+                    log_and_callback(f"レビューコメント {len(review_comments)}件を保存中...", 'info', base_progress + 0.7/total_repos)
                     comment_count = 0
                     for comment_data in review_comments:
                         # PRのURLからPR番号を取得
@@ -303,15 +331,17 @@ class DataManager:
                                 if self.db.upsert_review_comment(comment_data, db_pr['id']):
                                     comment_count += 1
                                 else:
-                                    logger.warning(f"レビューコメント ID {comment_data.get('id')} の保存に失敗")
+                                    log_and_callback(f"レビューコメント ID {comment_data.get('id')} の保存に失敗", 'warning')
                             else:
-                                logger.warning(f"PR番号 {pr_number} に対応するDBレコードが見つかりません")
+                                log_and_callback(f"PR番号 {pr_number} に対応するDBレコードが見つかりません", 'warning')
 
-                    logger.info(f"リポジトリ {repo_full_name} の処理完了: PRs={pr_count}, Comments={comment_count}")
+                    completion_msg = f"リポジトリ {repo_full_name} の処理完了: PRs={pr_count}, Comments={comment_count}"
+                    log_and_callback(completion_msg, 'info', base_progress + 0.8/total_repos)
                     success_count += 1
 
                 except Exception as e:
-                    logger.error(f"リポジトリ {repo_full_name} の処理中にエラー: {e}")
+                    error_msg = f"リポジトリ {repo_full_name} の処理中にエラー: {e}"
+                    log_and_callback(error_msg, 'error')
                     error_messages.append(f"リポジトリ {repo_full_name}: {str(e)}")
                     error_count += 1
                     continue
@@ -319,24 +349,24 @@ class DataManager:
             # 結果メッセージの作成
             if error_count == 0:
                 message = f"すべてのリポジトリの処理が正常に完了しました。(成功: {success_count}件)"
-                logger.info(message)
+                log_and_callback(message, 'info', 1.0)
                 return True, message
             elif success_count > 0:
                 message = f"一部のリポジトリで処理が完了しました。成功: {success_count}件, 失敗: {error_count}件"
                 if error_messages:
                     message += f"\nエラー詳細: {'; '.join(error_messages[:3])}"  # 最初の3件のみ表示
-                logger.warning(message)
+                log_and_callback(message, 'warning', 1.0)
                 return True, message
             else:
                 message = f"すべてのリポジトリの処理に失敗しました。失敗: {error_count}件"
                 if error_messages:
                     message += f"\nエラー詳細: {'; '.join(error_messages[:3])}"
-                logger.error(message)
+                log_and_callback(message, 'error', 1.0)
                 return False, message
 
         except Exception as e:
             error_message = f"データ取得・DB投入処理中に予期しないエラーが発生しました: {e}"
-            logger.error(error_message, exc_info=True)
+            log_and_callback(error_message, 'error', None)
             return False, error_message
 
 if __name__ == '__main__':

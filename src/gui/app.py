@@ -21,16 +21,44 @@ def display_sidebar(data_manager: DataManager) -> Tuple[Optional[List[Dict[str, 
     # DBにデータ投入ボタン
     st.sidebar.subheader("データ管理")
     if st.sidebar.button("🔄 DBにデータ投入", help="GitHub APIからデータを取得してDBに保存します"):
-        with st.sidebar:
-            with st.spinner("データを取得・保存中..."):
-                success, message = data_manager.fetch_and_store_all_data()
-
-            if success:
-                st.success(f"✅ {message}")
-                # データが更新されたので、ページをリフレッシュするためのヒントを表示
-                st.info("💡 データが更新されました。リポジトリリストが更新されるまで少しお待ちください。")
-            else:
-                st.error(f"❌ {message}")
+        # メインエリアでプログレスバーのみ表示
+        with st.container():
+            st.subheader("📊 データ取得・保存処理")
+            
+            # プログレスバーと現在の処理状況表示
+            progress_bar = st.progress(0)
+            current_status = st.empty()
+            
+            def progress_callback(message: str, level: str, progress: float):
+                """進行状況を受け取るコールバック関数（画面には簡潔な情報のみ表示）"""
+                # プログレスバーを更新
+                if progress is not None:
+                    progress_bar.progress(progress)
+                
+                # 現在の処理状況を表示（簡潔に）
+                if level == 'error':
+                    current_status.error(f"❌ {message}")
+                elif level == 'warning':
+                    current_status.warning(f"⚠️ {message}")
+                else:
+                    current_status.info(f"🔄 {message}")
+            
+            try:
+                # コールバック付きでデータ取得を実行（詳細ログはコンソールに出力）
+                success, message = data_manager.fetch_and_store_all_data(progress_callback)
+                
+                # 最終結果を表示
+                if success:
+                    current_status.success(f"✅ {message}")
+                    st.info("💡 データが更新されました。リポジトリリストが更新されるまで少しお待ちください。")
+                else:
+                    current_status.error(f"❌ {message}")
+                    
+            except Exception as e:
+                current_status.error(f"❌ 処理中にエラーが発生しました: {e}")
+                logger.error(f"データ取得処理中のエラー: {e}", exc_info=True)
+            finally:
+                progress_bar.empty()
 
     st.sidebar.markdown("---")
 
@@ -160,7 +188,8 @@ def display_lead_time_filters(data_manager: DataManager, repo_id: int) -> Tuple[
             start_date = st.date_input(
                 "Start Date",
                 value=None,
-                help="Filter PRs created on or after this date"
+                help="Filter PRs created on or after this date",
+                key="lead_time_start_date"
             )
             
         with col2:
@@ -168,7 +197,8 @@ def display_lead_time_filters(data_manager: DataManager, repo_id: int) -> Tuple[
             end_date = st.date_input(
                 "End Date", 
                 value=None,
-                help="Filter PRs created on or before this date"
+                help="Filter PRs created on or before this date",
+                key="lead_time_end_date"
             )
             
         with col3:
@@ -185,17 +215,18 @@ def display_lead_time_filters(data_manager: DataManager, repo_id: int) -> Tuple[
             selected_author = st.selectbox(
                 "Select Author",
                 options=author_options,
-                help="Filter PRs by author"
+                help="Filter PRs by author",
+                key="lead_time_author_select"
             )
         
         # Filter control buttons
         col1, col2, col3 = st.columns([1, 1, 2])
         
         with col1:
-            apply_filters = st.button("🔍 Apply Filters", type="primary")
+            apply_filters = st.button("� Apply FFilters", type="primary", key="lead_time_apply_filters")
             
         with col2:
-            reset_filters = st.button("🔄 Reset Filters")
+            reset_filters = st.button("🔄 Reset Filters", key="lead_time_reset_filters")
             
         # Handle reset
         if reset_filters:
@@ -374,6 +405,21 @@ def main():
         print("Streamlit is not installed. Please install it with: pip install streamlit")
         return
 
+    # ログ設定を初期化（コンソール出力を確実にする）
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(),  # コンソール出力
+        ]
+    )
+    
+    # 関連モジュールのログレベルを設定
+    logging.getLogger('src.gui.data_manager').setLevel(logging.INFO)
+    logging.getLogger('src.github_api.client').setLevel(logging.INFO)
+    logging.getLogger('src.github_api.fetcher').setLevel(logging.INFO)
+    logging.getLogger('src.db.database').setLevel(logging.INFO)
+
     st.set_page_config(layout="wide", page_title="GitHub PR Analysis Dashboard")
     st.title("GitHub PR Analysis Dashboard")
 
@@ -395,7 +441,8 @@ def main():
         analysis_type = st.radio(
             "Analysis Type",
             ["PR List & Details", "Review Lead Time Analysis"],
-            horizontal=True
+            horizontal=True,
+            key="main_analysis_type_radio"
         )
         
         if analysis_type == "Review Lead Time Analysis":
