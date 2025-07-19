@@ -426,6 +426,108 @@ class Database:
             logger.error(f"リポジトリ取得中にエラーが発生しました: {e}")
             return None
 
+    def get_pull_requests_with_filters(self, repository_id: int, 
+                                     start_date: datetime = None,
+                                     end_date: datetime = None,
+                                     author: str = None) -> list[dict[str, Any]]:
+        """
+        フィルタリング条件に基づいてプルリクエストを取得します。
+        
+        Args:
+            repository_id (int): リポジトリID
+            start_date (datetime, optional): 開始日（PR作成日でフィルタ）
+            end_date (datetime, optional): 終了日（PR作成日でフィルタ）
+            author (str, optional): 作成者でフィルタ
+            
+        Returns:
+            list[dict]: フィルタされたプルリクエスト情報のリスト
+        """
+        logger.info(f"フィルタ付きプルリクエスト取得開始 - リポジトリID: {repository_id}")
+        
+        try:
+            with self.get_session() as session:
+                # ベースクエリ
+                query_parts = ["""
+                    SELECT id, number, title, user_login, state, created_at, updated_at, 
+                           closed_at, merged_at, url, body
+                    FROM pull_requests
+                    WHERE repository_id = :repo_id
+                """]
+                
+                params = {"repo_id": repository_id}
+                
+                # 日付範囲フィルタ
+                if start_date:
+                    query_parts.append("AND created_at >= :start_date")
+                    params["start_date"] = start_date.isoformat()
+                    
+                if end_date:
+                    query_parts.append("AND created_at <= :end_date")
+                    params["end_date"] = end_date.isoformat()
+                
+                # 作成者フィルタ
+                if author:
+                    query_parts.append("AND user_login = :author")
+                    params["author"] = author
+                
+                query_parts.append("ORDER BY created_at DESC")
+                
+                final_query = " ".join(query_parts)
+                result = session.execute(text(final_query), params)
+                
+                pull_requests = [
+                    {
+                        "id": row.id,
+                        "number": row.number,
+                        "title": row.title,
+                        "user_login": row.user_login,
+                        "state": row.state,
+                        "created_at": row.created_at,
+                        "updated_at": row.updated_at,
+                        "closed_at": row.closed_at,
+                        "merged_at": row.merged_at,
+                        "url": row.url,
+                        "body": row.body
+                    } for row in result
+                ]
+                
+                logger.info(f"{len(pull_requests)}件のフィルタされたプルリクエストを取得しました")
+                return pull_requests
+                
+        except Exception as e:
+            logger.error(f"フィルタ付きプルリクエストの取得中にエラーが発生しました: {e}")
+            return []
+
+    def get_authors_for_repository(self, repository_id: int) -> list[str]:
+        """
+        指定されたリポジトリの作成者一覧を取得します。
+        
+        Args:
+            repository_id (int): リポジトリID
+            
+        Returns:
+            list[str]: 作成者のリスト
+        """
+        logger.info(f"リポジトリID {repository_id} の作成者一覧取得を開始します")
+        
+        try:
+            with self.get_session() as session:
+                query = text("""
+                    SELECT DISTINCT user_login
+                    FROM pull_requests
+                    WHERE repository_id = :repo_id
+                    ORDER BY user_login
+                """)
+                result = session.execute(query, {"repo_id": repository_id})
+                
+                authors = [row.user_login for row in result]
+                logger.info(f"{len(authors)}人の作成者を取得しました")
+                return authors
+                
+        except Exception as e:
+            logger.error(f"作成者一覧の取得中にエラーが発生しました: {e}")
+            return []
+
     def get_pull_request_by_number(self, repository_id: int, number: int) -> dict[str, Any] | None:
         """
         リポジトリIDとPR番号でプルリクエストを取得します。

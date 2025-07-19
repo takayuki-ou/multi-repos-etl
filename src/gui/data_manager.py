@@ -105,6 +105,66 @@ class DataManager:
             logger.error(f"Error getting review comments for PR ID {pr_db_id}: {e}", exc_info=True)
             return None, f"Database error while fetching review comments: {e}"
 
+    def get_pull_requests_with_lead_time_data(self, repository_id: int, 
+                                            start_date: Optional[datetime] = None,
+                                            end_date: Optional[datetime] = None,
+                                            author: Optional[str] = None) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+        """
+        リードタイム分析用のPRデータを取得（フィルタリング対応）
+        
+        Args:
+            repository_id: リポジトリID
+            start_date: 開始日（PR作成日でフィルタ）
+            end_date: 終了日（PR作成日でフィルタ）
+            author: 作成者でフィルタ
+            
+        Returns:
+            Tuple[List[Dict], Optional[str]]: (PRデータリスト, エラーメッセージ)
+        """
+        try:
+            prs_raw = self.db.get_pull_requests_with_filters(
+                repository_id=repository_id,
+                start_date=start_date,
+                end_date=end_date,
+                author=author
+            )
+            
+            if not prs_raw:
+                return [], None
+
+            parsed_prs: List[Dict[str, Any]] = []
+            for pr_data in prs_raw:
+                # 日時データの解析
+                pr_data['created_at_dt'] = _parse_datetime_string(pr_data.get('created_at'))
+                pr_data['updated_at_dt'] = _parse_datetime_string(pr_data.get('updated_at'))
+                pr_data['closed_at_dt'] = _parse_datetime_string(pr_data.get('closed_at'))
+                pr_data['merged_at_dt'] = _parse_datetime_string(pr_data.get('merged_at'))
+                
+                parsed_prs.append(pr_data)
+                
+            return parsed_prs, None
+            
+        except Exception as e:
+            logger.error(f"Error getting filtered pull requests for repo ID {repository_id}: {e}", exc_info=True)
+            return None, f"Database error while fetching filtered pull requests: {e}"
+
+    def get_authors_for_repository(self, repository_id: int) -> Tuple[List[str], Optional[str]]:
+        """
+        指定されたリポジトリの作成者一覧を取得
+        
+        Args:
+            repository_id: リポジトリID
+            
+        Returns:
+            Tuple[List[str], Optional[str]]: (作成者リスト, エラーメッセージ)
+        """
+        try:
+            authors = self.db.get_authors_for_repository(repository_id)
+            return authors, None
+        except Exception as e:
+            logger.error(f"Error getting authors for repo ID {repository_id}: {e}", exc_info=True)
+            return [], f"Database error while fetching authors: {e}"
+
     def fetch_and_store_all_data(self) -> Tuple[bool, str]:
         """
         GitHub APIからすべてのリポジトリのデータを取得し、DBに保存します。

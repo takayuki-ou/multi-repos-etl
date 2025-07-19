@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE INDEX IF NOT EXISTS idx_pull_requests_repository_id ON pull_requests(repository_id);
 CREATE INDEX IF NOT EXISTS idx_pull_requests_created_at ON pull_requests(created_at);
 CREATE INDEX IF NOT EXISTS idx_pull_requests_updated_at ON pull_requests(updated_at);
+CREATE INDEX IF NOT EXISTS idx_pull_requests_user_login ON pull_requests(user_login);
 CREATE INDEX IF NOT EXISTS idx_review_comments_pull_request_id ON review_comments(pull_request_id);
 CREATE INDEX IF NOT EXISTS idx_review_comments_created_at ON review_comments(created_at);
 CREATE INDEX IF NOT EXISTS idx_review_comments_updated_at ON review_comments(updated_at);
