@@ -138,6 +138,234 @@ def display_pr_details(selected_pr_data: Dict[str, Any], data_manager: DataManag
         st.info("No review comments found for this PR.")
 
 
+def display_lead_time_filters(data_manager: DataManager, repo_id: int) -> Tuple[Optional[datetime], Optional[datetime], Optional[str], bool]:
+    """
+    Display filter UI components for lead time analysis.
+    
+    Args:
+        data_manager: DataManager instance for database access
+        repo_id: Repository ID
+        
+    Returns:
+        Tuple of (start_date, end_date, author, filters_applied)
+        
+    Requirements addressed: 3.1, 3.2, 3.3
+    """
+    with st.expander("🔍 Filter Settings", expanded=True):
+        col1, col2, col3 = st.columns(3)
+        
+        # Date range filters
+        with col1:
+            st.markdown("**Date Range**")
+            start_date = st.date_input(
+                "Start Date",
+                value=None,
+                help="Filter PRs created on or after this date"
+            )
+            
+        with col2:
+            st.markdown("**&nbsp;**")  # Spacing
+            end_date = st.date_input(
+                "End Date", 
+                value=None,
+                help="Filter PRs created on or before this date"
+            )
+            
+        with col3:
+            st.markdown("**Author**")
+            # Get available authors for this repository
+            authors, author_error = data_manager.get_authors_for_repository(repo_id)
+            
+            if author_error:
+                st.error(f"Error loading authors: {author_error}")
+                author_options = []
+            else:
+                author_options = ["All Authors"] + sorted(authors) if authors else ["All Authors"]
+            
+            selected_author = st.selectbox(
+                "Select Author",
+                options=author_options,
+                help="Filter PRs by author"
+            )
+        
+        # Filter control buttons
+        col1, col2, col3 = st.columns([1, 1, 2])
+        
+        with col1:
+            apply_filters = st.button("🔍 Apply Filters", type="primary")
+            
+        with col2:
+            reset_filters = st.button("🔄 Reset Filters")
+            
+        # Handle reset
+        if reset_filters:
+            st.rerun()
+        
+        # Convert dates to datetime objects if provided
+        start_datetime = None
+        end_datetime = None
+        
+        if start_date:
+            start_datetime = datetime.combine(start_date, datetime.min.time())
+            
+        if end_date:
+            end_datetime = datetime.combine(end_date, datetime.max.time())
+        
+        # Convert author selection
+        author_filter = None if selected_author == "All Authors" else selected_author
+        
+        # Validate filter combination
+        if apply_filters and (start_datetime or end_datetime or author_filter):
+            is_valid, validation_error = data_manager.validate_filter_combination(
+                start_datetime, end_datetime, author_filter
+            )
+            
+            if not is_valid:
+                st.error(f"Filter validation error: {validation_error}")
+                return None, None, None, False
+        
+        # Show active filters summary
+        if apply_filters and (start_datetime or end_datetime or author_filter):
+            active_filters = []
+            if start_datetime:
+                active_filters.append(f"Start: {start_date}")
+            if end_datetime:
+                active_filters.append(f"End: {end_date}")
+            if author_filter:
+                active_filters.append(f"Author: {author_filter}")
+            
+            if active_filters:
+                st.info(f"Active filters: {' | '.join(active_filters)}")
+        
+        return start_datetime, end_datetime, author_filter, apply_filters
+
+
+def display_lead_time_analysis(data_manager: DataManager, selected_repo_data: Dict[str, Any]):
+    """
+    Display the review lead time analysis page.
+    
+    Args:
+        data_manager: DataManager instance for database access
+        selected_repo_data: Selected repository data dictionary
+        
+    Requirements addressed: 1.1, 3.1, 3.2, 3.3
+    """
+    st.header("📊 Review Lead Time Analysis")
+    st.markdown("Analyze the time it takes for pull requests to be reviewed and closed.")
+    
+    repo_name = f"{selected_repo_data['owner_login']}/{selected_repo_data['name']}"
+    repo_id = selected_repo_data['id']
+    
+    st.subheader(f"Repository: {repo_name}")
+    
+    # Import LeadTimeAnalyzer here to avoid circular imports
+    try:
+        from src.analysis.lead_time_analyzer import LeadTimeAnalyzer
+        analyzer = LeadTimeAnalyzer(data_manager)
+        
+        # Display filter UI
+        start_date, end_date, author, filters_applied = display_lead_time_filters(data_manager, repo_id)
+        
+        # Get pull requests based on filters
+        if filters_applied and (start_date or end_date or author):
+            # Use filtered data
+            with st.spinner("Loading filtered pull requests..."):
+                all_pull_requests, pr_error_msg = data_manager.get_pull_requests_with_lead_time_data(
+                    repo_id, start_date, end_date, author
+                )
+        else:
+            # Use all pull requests
+            all_pull_requests, pr_error_msg = data_manager.get_pull_requests(repo_id)
+        
+        if pr_error_msg:
+            st.error(f"Error loading pull requests: {pr_error_msg}")
+            return
+            
+        if not all_pull_requests:
+            if filters_applied and (start_date or end_date or author):
+                st.info("No pull requests match the current filter criteria.")
+            else:
+                st.info(f"No pull requests found for {repo_name}.")
+            return
+        
+        # Calculate lead times
+        with st.spinner("Calculating lead times..."):
+            lead_time_data = analyzer.calculate_lead_times(all_pull_requests)
+        
+        if not lead_time_data:
+            st.warning("No valid lead time data could be calculated for this repository.")
+            return
+        
+        # Display basic metrics
+        st.subheader("📈 Basic Metrics")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        total_prs = len(lead_time_data)
+        lead_times = analyzer.get_lead_times_only(lead_time_data)
+        
+        if lead_times:
+            avg_hours = sum(lead_times) / len(lead_times)
+            min_hours = min(lead_times)
+            max_hours = max(lead_times)
+            median_hours = sorted(lead_times)[len(lead_times) // 2]
+            
+            col1.metric("Total PRs", total_prs)
+            col2.metric("Average Lead Time", analyzer.format_lead_time_human_readable(avg_hours))
+            col3.metric("Median Lead Time", analyzer.format_lead_time_human_readable(median_hours))
+            col4.metric("Range", f"{analyzer.format_lead_time_human_readable(min_hours)} - {analyzer.format_lead_time_human_readable(max_hours)}")
+        
+        # Display detailed data table
+        st.subheader("📋 Detailed Lead Time Data")
+        
+        # Prepare data for display
+        display_data = []
+        for pr in lead_time_data:
+            display_data.append({
+                "PR #": pr['pr_number'],
+                "Title": pr['title'][:50] + "..." if len(pr['title']) > 50 else pr['title'],
+                "Author": pr['author'],
+                "Created": pr['created_at'].strftime('%Y-%m-%d %H:%M') if pr['created_at'] else 'N/A',
+                "Status": pr['end_type'].title() if pr['end_type'] else 'Unknown',
+                "Lead Time": analyzer.format_lead_time_human_readable(pr['lead_time_hours']),
+                "Hours": f"{pr['lead_time_hours']:.1f}h"
+            })
+        
+        st.dataframe(display_data, use_container_width=True)
+        
+        # Show statistics if we have enough data
+        if len(lead_times) >= 3:
+            st.subheader("📊 Statistical Analysis")
+            
+            basic_stats = analyzer.calculate_basic_statistics(lead_times)
+            percentiles = analyzer.calculate_percentiles(lead_times)
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("**Basic Statistics**")
+                st.write(f"Count: {basic_stats['count']}")
+                st.write(f"Mean: {analyzer.format_lead_time_human_readable(basic_stats['mean'])}")
+                st.write(f"Median: {analyzer.format_lead_time_human_readable(basic_stats['median'])}")
+                st.write(f"Std Dev: {basic_stats['std_dev']:.2f} hours")
+            
+            with col2:
+                st.markdown("**Percentiles**")
+                st.write(f"25th: {analyzer.format_lead_time_human_readable(percentiles['p25'])}")
+                st.write(f"75th: {analyzer.format_lead_time_human_readable(percentiles['p75'])}")
+                st.write(f"90th: {analyzer.format_lead_time_human_readable(percentiles['p90'])}")
+                st.write(f"IQR: {percentiles['iqr']:.2f} hours")
+        else:
+            st.info("Need at least 3 pull requests for detailed statistical analysis.")
+            
+    except ImportError as e:
+        st.error(f"Error importing LeadTimeAnalyzer: {e}")
+        st.error("Please ensure the analysis module is properly installed.")
+    except Exception as e:
+        logger.error(f"Error in lead time analysis: {e}", exc_info=True)
+        st.error(f"An error occurred during lead time analysis: {e}")
+
+
 def main():
     """
     Streamlitアプリケーションのメイン関数
@@ -163,32 +391,43 @@ def main():
             # If all_repos is None, display_sidebar already showed an error or "no repos" message.
             return
 
-        st.header(f"Details for {selected_repo_name}")
-        repo_id = selected_repo_data['id']
+        # Add navigation tabs for different analysis types
+        analysis_type = st.radio(
+            "Analysis Type",
+            ["PR List & Details", "Review Lead Time Analysis"],
+            horizontal=True
+        )
+        
+        if analysis_type == "Review Lead Time Analysis":
+            display_lead_time_analysis(data_manager, selected_repo_data)
+        else:
+            # Original PR list functionality
+            st.header(f"Details for {selected_repo_name}")
+            repo_id = selected_repo_data['id']
 
-        st.subheader("Pull Requests")
-        all_pull_requests, pr_error_msg = data_manager.get_pull_requests(repo_id)
+            st.subheader("Pull Requests")
+            all_pull_requests, pr_error_msg = data_manager.get_pull_requests(repo_id)
 
-        if pr_error_msg:
-            st.error(f"Error loading pull requests: {pr_error_msg}")
-            all_pull_requests = [] # Default to empty list to prevent further errors
+            if pr_error_msg:
+                st.error(f"Error loading pull requests: {pr_error_msg}")
+                all_pull_requests = [] # Default to empty list to prevent further errors
 
-        if not all_pull_requests and not pr_error_msg:
-            st.info(f"No pull requests found for {selected_repo_name}.")
-            return
+            if not all_pull_requests and not pr_error_msg:
+                st.info(f"No pull requests found for {selected_repo_name}.")
+                return
 
-        filtered_prs = all_pull_requests # Start with all PRs
-        if all_pull_requests: # Only show filters and apply them if there are PRs
-            selected_states, start_date, end_date = display_pr_filters(all_pull_requests)
-            filtered_prs = apply_filters(all_pull_requests, selected_states, start_date, end_date)
+            filtered_prs = all_pull_requests # Start with all PRs
+            if all_pull_requests: # Only show filters and apply them if there are PRs
+                selected_states, start_date, end_date = display_pr_filters(all_pull_requests)
+                filtered_prs = apply_filters(all_pull_requests, selected_states, start_date, end_date)
 
-        if filtered_prs:
-            selected_pr_data_for_details = display_pr_list_and_get_selection(filtered_prs)
-            if selected_pr_data_for_details:
-                display_pr_details(selected_pr_data_for_details, data_manager)
-        elif not pr_error_msg: # Filtered to zero, and no initial error loading PRs
-             st.info("No pull requests match the current filter criteria.")
-        # If pr_error_msg was present, it's already shown and all_pull_requests is empty
+            if filtered_prs:
+                selected_pr_data_for_details = display_pr_list_and_get_selection(filtered_prs)
+                if selected_pr_data_for_details:
+                    display_pr_details(selected_pr_data_for_details, data_manager)
+            elif not pr_error_msg: # Filtered to zero, and no initial error loading PRs
+                 st.info("No pull requests match the current filter criteria.")
+            # If pr_error_msg was present, it's already shown and all_pull_requests is empty
 
     except ValueError as ve:
         logger.error(f"Configuration error: {ve}", exc_info=True)
