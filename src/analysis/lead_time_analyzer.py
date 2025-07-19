@@ -4,7 +4,8 @@ Calculates and analyzes lead times for pull requests.
 """
 import logging
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
+from collections import defaultdict
 from src.gui.data_manager import DataManager, _parse_datetime_string
 from src.analysis.statistics_calculator import StatisticsCalculator
 
@@ -291,3 +292,203 @@ class LeadTimeAnalyzer:
         Requirements addressed: 2.3
         """
         return self.statistics_calculator.get_statistics_with_outlier_removal(lead_times, outlier_method)
+    
+    def group_by_period(self, lead_time_data: List[Dict[str, Any]], period: str = 'weekly') -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Group pull requests by time periods (weekly or monthly).
+        
+        Args:
+            lead_time_data: List of lead time dictionaries with created_at dates
+            period: Grouping period ('weekly' or 'monthly')
+            
+        Returns:
+            Dictionary with period keys and lists of PRs as values
+            
+        Requirements addressed: 4.1
+        """
+        if not lead_time_data:
+            logger.info("No lead time data provided for period grouping")
+            return {}
+        
+        if period not in ['weekly', 'monthly']:
+            logger.warning(f"Invalid period '{period}'. Using 'weekly' as default.")
+            period = 'weekly'
+        
+        grouped_data = defaultdict(list)
+        processed_count = 0
+        error_count = 0
+        
+        for pr_data in lead_time_data:
+            try:
+                created_at = pr_data.get('created_at')
+                if not created_at:
+                    logger.warning(f"PR #{pr_data.get('pr_number', 'unknown')} missing created_at")
+                    error_count += 1
+                    continue
+                
+                # Ensure created_at is a datetime object
+                if isinstance(created_at, str):
+                    created_at = self._parse_pr_datetime(created_at)
+                    if not created_at:
+                        error_count += 1
+                        continue
+                
+                # Generate period key
+                period_key = self._get_period_key(created_at, period)
+                grouped_data[period_key].append(pr_data)
+                processed_count += 1
+                
+            except Exception as e:
+                pr_number = pr_data.get('pr_number', 'unknown')
+                logger.warning(f"Error grouping PR #{pr_number} by period: {e}")
+                error_count += 1
+                continue
+        
+        logger.info(f"Period grouping completed. Processed: {processed_count}, Errors: {error_count}, Groups: {len(grouped_data)}")
+        return dict(grouped_data)
+    
+    def _get_period_key(self, date: datetime, period: str) -> str:
+        """
+        Generate a period key for grouping based on the date and period type.
+        
+        Args:
+            date: Datetime object
+            period: Period type ('weekly' or 'monthly')
+            
+        Returns:
+            String key representing the period
+        """
+        if period == 'weekly':
+            # Get the Monday of the week containing this date
+            monday = date - timedelta(days=date.weekday())
+            return monday.strftime('%Y-W%U')  # Year-Week format
+        elif period == 'monthly':
+            return date.strftime('%Y-%m')  # Year-Month format
+        else:
+            raise ValueError(f"Unsupported period type: {period}")
+    
+    def calculate_period_statistics(self, grouped_data: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Dict[str, Any]]:
+        """
+        Calculate average lead time and statistics for each period.
+        
+        Args:
+            grouped_data: Dictionary with period keys and lists of PR data
+            
+        Returns:
+            Dictionary with period keys and their statistics
+            
+        Requirements addressed: 4.2
+        """
+        if not grouped_data:
+            logger.info("No grouped data provided for period statistics calculation")
+            return {}
+        
+        period_stats = {}
+        
+        for period_key, pr_list in grouped_data.items():
+            try:
+                if not pr_list:
+                    # Handle empty periods
+                    period_stats[period_key] = {
+                        'count': 0,
+                        'average_lead_time_hours': 0.0,
+                        'average_lead_time_days': 0.0,
+                        'total_lead_time_hours': 0.0,
+                        'period_start': None,
+                        'period_end': None
+                    }
+                    continue
+                
+                # Extract lead times for this period
+                lead_times = [pr['lead_time_hours'] for pr in pr_list if 'lead_time_hours' in pr]
+                
+                if not lead_times:
+                    logger.warning(f"No valid lead times found for period {period_key}")
+                    period_stats[period_key] = {
+                        'count': len(pr_list),
+                        'average_lead_time_hours': 0.0,
+                        'average_lead_time_days': 0.0,
+                        'total_lead_time_hours': 0.0,
+                        'period_start': None,
+                        'period_end': None
+                    }
+                    continue
+                
+                # Calculate statistics for this period
+                avg_hours = sum(lead_times) / len(lead_times)
+                avg_days = avg_hours / 24
+                total_hours = sum(lead_times)
+                
+                # Get period boundaries
+                dates = [pr['created_at'] for pr in pr_list if pr.get('created_at')]
+                period_start = min(dates) if dates else None
+                period_end = max(dates) if dates else None
+                
+                period_stats[period_key] = {
+                    'count': len(pr_list),
+                    'average_lead_time_hours': round(avg_hours, 2),
+                    'average_lead_time_days': round(avg_days, 2),
+                    'total_lead_time_hours': round(total_hours, 2),
+                    'period_start': period_start,
+                    'period_end': period_end,
+                    'lead_times': lead_times  # Include raw data for further analysis
+                }
+                
+            except Exception as e:
+                logger.error(f"Error calculating statistics for period {period_key}: {e}")
+                period_stats[period_key] = {
+                    'count': len(pr_list) if pr_list else 0,
+                    'average_lead_time_hours': 0.0,
+                    'average_lead_time_days': 0.0,
+                    'total_lead_time_hours': 0.0,
+                    'period_start': None,
+                    'period_end': None,
+                    'error': str(e)
+                }
+        
+        logger.info(f"Period statistics calculated for {len(period_stats)} periods")
+        return period_stats
+    
+    def get_trend_data(self, lead_time_data: List[Dict[str, Any]], period: str = 'weekly') -> Dict[str, Any]:
+        """
+        Generate trend data by grouping PRs by period and calculating statistics.
+        
+        Args:
+            lead_time_data: List of lead time dictionaries
+            period: Grouping period ('weekly' or 'monthly')
+            
+        Returns:
+            Dictionary containing grouped data and period statistics
+            
+        Requirements addressed: 4.1, 4.2
+        """
+        if not lead_time_data:
+            logger.info("No lead time data provided for trend analysis")
+            return {
+                'grouped_data': {},
+                'period_statistics': {},
+                'period_type': period,
+                'total_periods': 0,
+                'total_prs': 0
+            }
+        
+        # Group data by period
+        grouped_data = self.group_by_period(lead_time_data, period)
+        
+        # Calculate statistics for each period
+        period_statistics = self.calculate_period_statistics(grouped_data)
+        
+        # Calculate summary information
+        total_periods = len(grouped_data)
+        total_prs = sum(len(pr_list) for pr_list in grouped_data.values())
+        
+        result = {
+            'grouped_data': grouped_data,
+            'period_statistics': period_statistics,
+            'period_type': period,
+            'total_periods': total_periods,
+            'total_prs': total_prs
+        }
+        
+        logger.info(f"Trend data generated: {total_periods} periods, {total_prs} PRs")
+        return result

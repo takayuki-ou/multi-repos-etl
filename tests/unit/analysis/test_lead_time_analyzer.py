@@ -246,3 +246,217 @@ class TestLeadTimeAnalyzer:
         comprehensive = self.analyzer.get_statistics_with_outlier_removal(outlier_data, 'iqr')
         assert 'original_stats' in comprehensive
         assert 'filtered_stats' in comprehensive
+    
+    def test_group_by_period_weekly(self):
+        """Test grouping PRs by weekly periods."""
+        # Create test data spanning multiple weeks
+        lead_time_data = [
+            {
+                'pr_id': 1,
+                'pr_number': 101,
+                'created_at': datetime(2024, 1, 1),  # Monday
+                'lead_time_hours': 10.0
+            },
+            {
+                'pr_id': 2,
+                'pr_number': 102,
+                'created_at': datetime(2024, 1, 3),  # Wednesday same week
+                'lead_time_hours': 15.0
+            },
+            {
+                'pr_id': 3,
+                'pr_number': 103,
+                'created_at': datetime(2024, 1, 8),  # Monday next week
+                'lead_time_hours': 20.0
+            }
+        ]
+        
+        result = self.analyzer.group_by_period(lead_time_data, 'weekly')
+        
+        # Should have 2 groups (2 different weeks)
+        assert len(result) == 2
+        
+        # Check that PRs are grouped correctly
+        week_keys = list(result.keys())
+        assert len(result[week_keys[0]]) == 2  # First week has 2 PRs
+        assert len(result[week_keys[1]]) == 1  # Second week has 1 PR
+    
+    def test_group_by_period_monthly(self):
+        """Test grouping PRs by monthly periods."""
+        lead_time_data = [
+            {
+                'pr_id': 1,
+                'pr_number': 101,
+                'created_at': datetime(2024, 1, 15),
+                'lead_time_hours': 10.0
+            },
+            {
+                'pr_id': 2,
+                'pr_number': 102,
+                'created_at': datetime(2024, 1, 25),
+                'lead_time_hours': 15.0
+            },
+            {
+                'pr_id': 3,
+                'pr_number': 103,
+                'created_at': datetime(2024, 2, 5),
+                'lead_time_hours': 20.0
+            }
+        ]
+        
+        result = self.analyzer.group_by_period(lead_time_data, 'monthly')
+        
+        # Should have 2 groups (January and February)
+        assert len(result) == 2
+        assert '2024-01' in result
+        assert '2024-02' in result
+        assert len(result['2024-01']) == 2
+        assert len(result['2024-02']) == 1
+    
+    def test_group_by_period_empty_data(self):
+        """Test grouping with empty data."""
+        result = self.analyzer.group_by_period([], 'weekly')
+        assert result == {}
+    
+    def test_group_by_period_invalid_period(self):
+        """Test grouping with invalid period type."""
+        lead_time_data = [
+            {
+                'pr_id': 1,
+                'pr_number': 101,
+                'created_at': datetime(2024, 1, 1),
+                'lead_time_hours': 10.0
+            }
+        ]
+        
+        # Should default to weekly for invalid period
+        result = self.analyzer.group_by_period(lead_time_data, 'invalid')
+        assert len(result) == 1  # Should still group the data
+    
+    def test_get_period_key_weekly(self):
+        """Test weekly period key generation."""
+        # Test various days of the week
+        monday = datetime(2024, 1, 1)  # Monday
+        wednesday = datetime(2024, 1, 3)  # Wednesday same week
+        sunday = datetime(2024, 1, 7)  # Sunday same week
+        
+        key1 = self.analyzer._get_period_key(monday, 'weekly')
+        key2 = self.analyzer._get_period_key(wednesday, 'weekly')
+        key3 = self.analyzer._get_period_key(sunday, 'weekly')
+        
+        # All should have the same week key
+        assert key1 == key2 == key3
+        assert key1.startswith('2024-W')
+    
+    def test_get_period_key_monthly(self):
+        """Test monthly period key generation."""
+        date1 = datetime(2024, 1, 1)
+        date2 = datetime(2024, 1, 31)
+        date3 = datetime(2024, 2, 1)
+        
+        key1 = self.analyzer._get_period_key(date1, 'monthly')
+        key2 = self.analyzer._get_period_key(date2, 'monthly')
+        key3 = self.analyzer._get_period_key(date3, 'monthly')
+        
+        assert key1 == key2 == '2024-01'
+        assert key3 == '2024-02'
+    
+    def test_calculate_period_statistics(self):
+        """Test calculation of statistics for grouped periods."""
+        grouped_data = {
+            '2024-01': [
+                {'pr_id': 1, 'lead_time_hours': 10.0, 'created_at': datetime(2024, 1, 1)},
+                {'pr_id': 2, 'lead_time_hours': 20.0, 'created_at': datetime(2024, 1, 2)}
+            ],
+            '2024-02': [
+                {'pr_id': 3, 'lead_time_hours': 30.0, 'created_at': datetime(2024, 2, 1)}
+            ]
+        }
+        
+        result = self.analyzer.calculate_period_statistics(grouped_data)
+        
+        assert len(result) == 2
+        
+        # Check January statistics
+        jan_stats = result['2024-01']
+        assert jan_stats['count'] == 2
+        assert jan_stats['average_lead_time_hours'] == 15.0  # (10 + 20) / 2
+        assert jan_stats['average_lead_time_days'] == pytest.approx(0.625, rel=1e-2)  # 15/24
+        assert jan_stats['total_lead_time_hours'] == 30.0
+        
+        # Check February statistics
+        feb_stats = result['2024-02']
+        assert feb_stats['count'] == 1
+        assert feb_stats['average_lead_time_hours'] == 30.0
+        assert feb_stats['average_lead_time_days'] == 1.25  # 30/24
+    
+    def test_calculate_period_statistics_empty_period(self):
+        """Test statistics calculation with empty periods."""
+        grouped_data = {
+            '2024-01': [],
+            '2024-02': [
+                {'pr_id': 1, 'lead_time_hours': 10.0, 'created_at': datetime(2024, 2, 1)}
+            ]
+        }
+        
+        result = self.analyzer.calculate_period_statistics(grouped_data)
+        
+        # Empty period should have zero statistics
+        jan_stats = result['2024-01']
+        assert jan_stats['count'] == 0
+        assert jan_stats['average_lead_time_hours'] == 0.0
+        assert jan_stats['total_lead_time_hours'] == 0.0
+        
+        # Non-empty period should have normal statistics
+        feb_stats = result['2024-02']
+        assert feb_stats['count'] == 1
+        assert feb_stats['average_lead_time_hours'] == 10.0
+    
+    def test_get_trend_data(self):
+        """Test comprehensive trend data generation."""
+        lead_time_data = [
+            {
+                'pr_id': 1,
+                'pr_number': 101,
+                'created_at': datetime(2024, 1, 1),
+                'lead_time_hours': 10.0
+            },
+            {
+                'pr_id': 2,
+                'pr_number': 102,
+                'created_at': datetime(2024, 1, 3),
+                'lead_time_hours': 20.0
+            },
+            {
+                'pr_id': 3,
+                'pr_number': 103,
+                'created_at': datetime(2024, 1, 8),
+                'lead_time_hours': 30.0
+            }
+        ]
+        
+        result = self.analyzer.get_trend_data(lead_time_data, 'weekly')
+        
+        # Check structure
+        assert 'grouped_data' in result
+        assert 'period_statistics' in result
+        assert 'period_type' in result
+        assert 'total_periods' in result
+        assert 'total_prs' in result
+        
+        # Check values
+        assert result['period_type'] == 'weekly'
+        assert result['total_prs'] == 3
+        assert result['total_periods'] >= 1  # At least one period
+        
+        # Check that statistics are calculated
+        assert len(result['period_statistics']) == len(result['grouped_data'])
+    
+    def test_get_trend_data_empty(self):
+        """Test trend data generation with empty input."""
+        result = self.analyzer.get_trend_data([], 'weekly')
+        
+        assert result['grouped_data'] == {}
+        assert result['period_statistics'] == {}
+        assert result['total_periods'] == 0
+        assert result['total_prs'] == 0

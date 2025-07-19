@@ -184,8 +184,10 @@ class TestDataManagerFilteringIntegration:
             author='nonexistent_user'
         )
         
-        assert error is None
         assert len(result) == 0
+        assert error is not None
+        assert "指定された条件" in error
+        assert "nonexistent_user" in error
 
     def test_get_authors_for_repository(self, data_manager_with_test_db):
         """作成者一覧取得テスト"""
