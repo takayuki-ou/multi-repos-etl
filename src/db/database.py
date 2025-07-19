@@ -429,7 +429,8 @@ class Database:
     def get_pull_requests_with_filters(self, repository_id: int, 
                                      start_date: datetime = None,
                                      end_date: datetime = None,
-                                     author: str = None) -> list[dict[str, Any]]:
+                                     author: str = None,
+                                     status: str = None) -> list[dict[str, Any]]:
         """
         フィルタリング条件に基づいてプルリクエストを取得します。
         複数のフィルタはANDロジックで組み合わせられます。
@@ -439,6 +440,7 @@ class Database:
             start_date (datetime, optional): 開始日（PR作成日でフィルタ）
             end_date (datetime, optional): 終了日（PR作成日でフィルタ）
             author (str, optional): 作成者でフィルタ
+            status (str, optional): PRステータスでフィルタ（例: 'closed', 'open', 'merged'）
             
         Returns:
             list[dict]: フィルタされたプルリクエスト情報のリスト
@@ -479,6 +481,12 @@ class Database:
                     query_parts.append("AND user_login = :author")
                     params["author"] = author
                     filter_descriptions.append(f"作成者 = {author}")
+                
+                # ステータスフィルタ（ANDロジック）
+                if status:
+                    query_parts.append("AND state = :status")
+                    params["status"] = status
+                    filter_descriptions.append(f"ステータス = {status}")
                 
                 query_parts.append("ORDER BY created_at DESC")
                 

@@ -200,6 +200,38 @@ class TestDataManagerFilteringIntegration:
         assert set(result) == {'user1', 'user2', 'user3'}
         assert result == sorted(result)  # アルファベット順にソートされている
 
+    def test_get_pull_requests_with_status_filter(self, data_manager_with_test_db):
+        """ステータスフィルタでのPR取得テスト"""
+        data_manager = data_manager_with_test_db
+        
+        # closedステータスのPRのみ取得
+        result, error = data_manager.get_pull_requests_with_lead_time_data(
+            repository_id=1,
+            status='closed'
+        )
+        
+        assert error is None
+        assert len(result) == 3  # user1、user2、user3のclosedなPR
+        
+        # すべてのPRがclosedステータスであることを確認
+        for pr in result:
+            assert pr['state'] == 'closed'
+
+    def test_get_pull_requests_with_status_and_author_filter(self, data_manager_with_test_db):
+        """ステータスと作成者の複合フィルタテスト"""
+        data_manager = data_manager_with_test_db
+        
+        result, error = data_manager.get_pull_requests_with_lead_time_data(
+            repository_id=1,
+            author='user1',
+            status='closed'
+        )
+        
+        assert error is None
+        assert len(result) == 1  # user1のclosedなPRのみ
+        assert result[0]['user_login'] == 'user1'
+        assert result[0]['state'] == 'closed'
+
     def test_get_authors_for_nonexistent_repository(self, data_manager_with_test_db):
         """存在しないリポジトリの作成者一覧取得テスト"""
         data_manager = data_manager_with_test_db

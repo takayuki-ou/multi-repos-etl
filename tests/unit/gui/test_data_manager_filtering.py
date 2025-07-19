@@ -63,7 +63,8 @@ class TestDataManagerFiltering:
             repository_id=1,
             start_date=None,
             end_date=None,
-            author=None
+            author=None,
+            status=None
         )
 
     def test_get_pull_requests_with_lead_time_data_with_filters_success(self, mock_data_manager):
@@ -110,7 +111,8 @@ class TestDataManagerFiltering:
             repository_id=1,
             start_date=start_date,
             end_date=end_date,
-            author=author
+            author=author,
+            status=None
         )
 
     def test_get_pull_requests_with_lead_time_data_database_error(self, mock_data_manager):
@@ -271,6 +273,72 @@ class TestDataManagerFiltering:
         assert "終了日: 2023-12-31" in error
         assert "作成者: testuser" in error
         assert "に一致するプルリクエストが見つかりませんでした" in error
+
+    def test_get_pull_requests_with_lead_time_data_with_status_filter(self, mock_data_manager):
+        """ステータスフィルタでのPR取得テスト"""
+        data_manager, mock_db = mock_data_manager
+        
+        mock_pr_data = [
+            {
+                'id': 1,
+                'number': 1,
+                'title': 'Closed PR',
+                'user_login': 'user1',
+                'state': 'closed',
+                'created_at': '2023-01-01T10:00:00Z',
+                'updated_at': '2023-01-02T10:00:00Z',
+                'closed_at': '2023-01-02T10:00:00Z',
+                'merged_at': '2023-01-02T10:00:00Z',
+                'url': 'https://github.com/test/repo/pull/1',
+                'body': 'Test PR body'
+            }
+        ]
+        mock_db.get_pull_requests_with_filters.return_value = mock_pr_data
+        
+        # テスト実行
+        result, error = data_manager.get_pull_requests_with_lead_time_data(
+            repository_id=1,
+            status='closed'
+        )
+        
+        # 検証
+        assert error is None
+        assert len(result) == 1
+        assert result[0]['state'] == 'closed'
+        
+        # DBメソッドが正しい引数で呼ばれたことを確認
+        mock_db.get_pull_requests_with_filters.assert_called_once_with(
+            repository_id=1,
+            start_date=None,
+            end_date=None,
+            author=None,
+            status='closed'
+        )
+
+    def test_validate_filter_combination_invalid_status(self, mock_data_manager):
+        """無効なステータスのテスト"""
+        data_manager, _ = mock_data_manager
+        
+        # テスト実行
+        is_valid, error = data_manager.validate_filter_combination(status='invalid_status')
+        
+        # 検証
+        assert is_valid is False
+        assert error is not None
+        assert "無効なステータスです" in error
+        assert "open, closed" in error
+
+    def test_validate_filter_combination_valid_status(self, mock_data_manager):
+        """有効なステータスのテスト"""
+        data_manager, _ = mock_data_manager
+        
+        for valid_status in ['open', 'closed']:
+            # テスト実行
+            is_valid, error = data_manager.validate_filter_combination(status=valid_status)
+            
+            # 検証
+            assert is_valid is True
+            assert error is None
 
     def test_get_pull_requests_with_lead_time_data_invalid_filters(self, mock_data_manager):
         """無効なフィルタでのテスト"""

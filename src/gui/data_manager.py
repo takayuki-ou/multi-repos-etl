@@ -108,7 +108,8 @@ class DataManager:
     def get_pull_requests_with_lead_time_data(self, repository_id: int, 
                                             start_date: Optional[datetime] = None,
                                             end_date: Optional[datetime] = None,
-                                            author: Optional[str] = None) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+                                            author: Optional[str] = None,
+                                            status: Optional[str] = None) -> Tuple[List[Dict[str, Any]], Optional[str]]:
         """
         リードタイム分析用のPRデータを取得（フィルタリング対応）
         
@@ -117,13 +118,14 @@ class DataManager:
             start_date: 開始日（PR作成日でフィルタ）
             end_date: 終了日（PR作成日でフィルタ）
             author: 作成者でフィルタ
+            status: PRステータスでフィルタ（例: 'closed', 'open', 'merged'）
             
         Returns:
             Tuple[List[Dict], Optional[str]]: (PRデータリスト, エラーメッセージ)
         """
         try:
             # フィルタ条件の検証
-            is_valid, validation_error = self.validate_filter_combination(start_date, end_date, author)
+            is_valid, validation_error = self.validate_filter_combination(start_date, end_date, author, status)
             if not is_valid:
                 logger.warning(f"フィルタ条件が無効です: {validation_error}")
                 return [], validation_error
@@ -136,6 +138,8 @@ class DataManager:
                 filter_conditions.append(f"終了日: {end_date.strftime('%Y-%m-%d')}")
             if author:
                 filter_conditions.append(f"作成者: {author}")
+            if status:
+                filter_conditions.append(f"ステータス: {status}")
             
             if filter_conditions:
                 logger.info(f"フィルタ条件を適用してPRを取得（ANDロジック）: {', '.join(filter_conditions)}")
@@ -144,7 +148,8 @@ class DataManager:
                 repository_id=repository_id,
                 start_date=start_date,
                 end_date=end_date,
-                author=author
+                author=author,
+                status=status
             )
             
             if not prs_raw:
@@ -193,7 +198,8 @@ class DataManager:
 
     def validate_filter_combination(self, start_date: Optional[datetime] = None,
                                   end_date: Optional[datetime] = None,
-                                  author: Optional[str] = None) -> Tuple[bool, Optional[str]]:
+                                  author: Optional[str] = None,
+                                  status: Optional[str] = None) -> Tuple[bool, Optional[str]]:
         """
         フィルタ条件の組み合わせを検証します
         
@@ -201,6 +207,7 @@ class DataManager:
             start_date: 開始日
             end_date: 終了日
             author: 作成者
+            status: PRステータス
             
         Returns:
             Tuple[bool, Optional[str]]: (検証結果, エラーメッセージ)
@@ -222,6 +229,12 @@ class DataManager:
                     return False, "作成者名が空です。"
                 if len(author) > 100:  # 合理的な長さ制限
                     return False, "作成者名が長すぎます。"
+            
+            # ステータスの検証（GitHubの仕様上、openとclosedの2択）
+            if status:
+                valid_statuses = ['open', 'closed']
+                if status not in valid_statuses:
+                    return False, f"無効なステータスです。有効な値: {', '.join(valid_statuses)}"
             
             return True, None
             
