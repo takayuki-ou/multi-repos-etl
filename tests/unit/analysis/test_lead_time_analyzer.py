@@ -219,3 +219,30 @@ class TestLeadTimeAnalyzer:
         """Test extraction of lead time values from empty list."""
         result = self.analyzer.get_lead_times_only([])
         assert result == []
+    
+    def test_statistics_calculator_integration(self):
+        """Test that LeadTimeAnalyzer properly delegates to StatisticsCalculator."""
+        # Test that the statistics calculator is initialized
+        assert self.analyzer.statistics_calculator is not None
+        
+        # Test basic statistics delegation
+        lead_times = [10.0, 15.0, 20.0, 25.0, 30.0]
+        result = self.analyzer.calculate_basic_statistics(lead_times)
+        assert result['count'] == 5
+        assert result['mean'] == 20.0
+        
+        # Test percentiles delegation
+        percentiles = self.analyzer.calculate_percentiles(lead_times)
+        assert 'p25' in percentiles
+        assert 'p75' in percentiles
+        assert 'iqr' in percentiles
+        
+        # Test outlier removal delegation
+        outlier_data = [10, 12, 11, 13, 12, 11, 10, 13, 100]
+        filtered = self.analyzer.remove_outliers(outlier_data, method='iqr')
+        assert len(filtered) < len(outlier_data)
+        
+        # Test comprehensive statistics delegation
+        comprehensive = self.analyzer.get_statistics_with_outlier_removal(outlier_data, 'iqr')
+        assert 'original_stats' in comprehensive
+        assert 'filtered_stats' in comprehensive

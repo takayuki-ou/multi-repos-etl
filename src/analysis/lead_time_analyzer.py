@@ -6,6 +6,7 @@ import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from src.gui.data_manager import DataManager, _parse_datetime_string
+from src.analysis.statistics_calculator import StatisticsCalculator
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ class LeadTimeAnalyzer:
             data_manager: DataManager instance for database access
         """
         self.data_manager = data_manager
+        self.statistics_calculator = StatisticsCalculator()
         logger.info("LeadTimeAnalyzer initialized")
     
     def calculate_lead_times(self, pull_requests: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -230,3 +232,62 @@ class LeadTimeAnalyzer:
             List of lead time values in hours
         """
         return [item['lead_time_hours'] for item in lead_time_data if 'lead_time_hours' in item]
+    
+    def calculate_basic_statistics(self, lead_times: List[float]) -> Dict[str, Any]:
+        """
+        Calculate basic statistical metrics for lead times.
+        
+        Args:
+            lead_times: List of lead time values in hours
+            
+        Returns:
+            Dictionary containing basic statistics
+            
+        Requirements addressed: 2.1, 2.4
+        """
+        return self.statistics_calculator.calculate_basic_statistics(lead_times)
+    
+    def calculate_percentiles(self, lead_times: List[float]) -> Dict[str, float]:
+        """
+        Calculate percentile distribution for lead times.
+        
+        Args:
+            lead_times: List of lead time values in hours
+            
+        Returns:
+            Dictionary containing percentile values
+            
+        Requirements addressed: 2.2
+        """
+        return self.statistics_calculator.calculate_percentiles(lead_times)
+    
+    def remove_outliers(self, lead_times: List[float], method: str = 'iqr') -> List[float]:
+        """
+        Remove outliers from lead times using specified method.
+        
+        Args:
+            lead_times: List of lead time values in hours
+            method: Method for outlier detection ('iqr', 'zscore', or 'percentile')
+                   
+        Returns:
+            List of lead times with outliers removed
+            
+        Requirements addressed: 2.3
+        """
+        return self.statistics_calculator.remove_outliers(lead_times, method)
+    
+    def get_statistics_with_outlier_removal(self, lead_times: List[float], 
+                                          outlier_method: str = 'iqr') -> Dict[str, Any]:
+        """
+        Calculate statistics after removing outliers and provide comparison.
+        
+        Args:
+            lead_times: List of lead time values in hours
+            outlier_method: Method for outlier removal ('iqr', 'zscore', 'percentile')
+            
+        Returns:
+            Dictionary containing comparison of original and filtered statistics
+            
+        Requirements addressed: 2.3
+        """
+        return self.statistics_calculator.get_statistics_with_outlier_removal(lead_times, outlier_method)
