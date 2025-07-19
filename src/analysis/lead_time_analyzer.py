@@ -492,3 +492,387 @@ class LeadTimeAnalyzer:
         
         logger.info(f"Trend data generated: {total_periods} periods, {total_prs} PRs")
         return result
+    
+    def calculate_trend_statistics(self, grouped_data: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Dict[str, Any]]:
+        """
+        Calculate trend statistics with change rates and trend direction.
+        
+        Args:
+            grouped_data: Dictionary with period keys and lists of PR data
+            
+        Returns:
+            Dictionary with period keys and their trend statistics including change rates
+            
+        Requirements addressed: 4.3, 4.4
+        """
+        if not grouped_data:
+            logger.info("No grouped data provided for trend statistics calculation")
+            return {}
+        
+        trend_data = {}
+        periods = sorted(grouped_data.keys())
+        
+        for i, period in enumerate(periods):
+            pr_list = grouped_data[period]
+            
+            try:
+                # Extract lead times for this period
+                lead_times = [pr['lead_time_hours'] for pr in pr_list if 'lead_time_hours' in pr]
+                current_avg = sum(lead_times) / len(lead_times) if lead_times else 0.0
+                
+                # Calculate change rate compared to previous period
+                change_rate = 0.0
+                prev_period_key = None
+                if i > 0:
+                    prev_period_key = periods[i-1]
+                    if prev_period_key in trend_data:
+                        prev_avg = trend_data[prev_period_key]['average']
+                        if prev_avg > 0:
+                            change_rate = ((current_avg - prev_avg) / prev_avg) * 100
+                
+                # Determine trend direction
+                trend_direction = self._determine_trend_direction(change_rate)
+                
+                # Calculate additional statistics
+                median_time = 0.0
+                min_time = 0.0
+                max_time = 0.0
+                if lead_times:
+                    sorted_times = sorted(lead_times)
+                    median_time = sorted_times[len(sorted_times) // 2]
+                    min_time = min(lead_times)
+                    max_time = max(lead_times)
+                
+                # Get period boundaries
+                dates = [pr['created_at'] for pr in pr_list if pr.get('created_at')]
+                period_start = min(dates) if dates else None
+                period_end = max(dates) if dates else None
+                
+                trend_data[period] = {
+                    'average': round(current_avg, 2),
+                    'median': round(median_time, 2),
+                    'min': round(min_time, 2),
+                    'max': round(max_time, 2),
+                    'count': len(pr_list),
+                    'change_rate': round(change_rate, 2),
+                    'trend_direction': trend_direction,
+                    'previous_period': prev_period_key,
+                    'period_start': period_start,
+                    'period_end': period_end,
+                    'lead_times': lead_times  # Raw data for further analysis
+                }
+                
+            except Exception as e:
+                logger.error(f"Error calculating trend statistics for period {period}: {e}")
+                trend_data[period] = {
+                    'average': 0.0,
+                    'median': 0.0,
+                    'min': 0.0,
+                    'max': 0.0,
+                    'count': len(pr_list) if pr_list else 0,
+                    'change_rate': 0.0,
+                    'trend_direction': 'unknown',
+                    'previous_period': None,
+                    'period_start': None,
+                    'period_end': None,
+                    'error': str(e)
+                }
+        
+        logger.info(f"Trend statistics calculated for {len(trend_data)} periods")
+        return trend_data
+    
+    def _determine_trend_direction(self, change_rate: float) -> str:
+        """
+        Determine trend direction based on change rate.
+        
+        Args:
+            change_rate: Percentage change from previous period
+            
+        Returns:
+            String indicating trend direction ('improving', 'worsening', 'stable', 'unknown')
+        """
+        if change_rate == 0.0:
+            return 'stable'
+        elif change_rate < -5.0:  # More than 5% improvement (decrease in lead time)
+            return 'improving'
+        elif change_rate > 5.0:   # More than 5% worsening (increase in lead time)
+            return 'worsening'
+        elif -5.0 <= change_rate <= 5.0:  # Within 5% range
+            return 'stable'
+        else:
+            return 'unknown'
+    
+    def calculate_moving_averages(self, trend_data: Dict[str, Dict[str, Any]], 
+                                window_sizes: List[int] = [3, 7]) -> Dict[str, Dict[str, Any]]:
+        """
+        Calculate moving averages for trend data.
+        
+        Args:
+            trend_data: Dictionary with period trend statistics
+            window_sizes: List of window sizes for moving averages (default: [3, 7])
+            
+        Returns:
+            Enhanced trend data with moving averages
+        """
+        if not trend_data or not window_sizes:
+            return trend_data
+        
+        periods = sorted(trend_data.keys())
+        averages = [trend_data[period]['average'] for period in periods]
+        
+        enhanced_data = trend_data.copy()
+        
+        for window_size in window_sizes:
+            if window_size <= 0 or window_size > len(periods):
+                continue
+                
+            moving_avg_key = f'moving_avg_{window_size}'
+            
+            for i, period in enumerate(periods):
+                if i >= window_size - 1:
+                    # Calculate moving average for current window
+                    window_values = averages[i - window_size + 1:i + 1]
+                    moving_avg = sum(window_values) / len(window_values)
+                    enhanced_data[period][moving_avg_key] = round(moving_avg, 2)
+                else:
+                    # Not enough data for moving average
+                    enhanced_data[period][moving_avg_key] = None
+        
+        return enhanced_data
+    
+    def get_multi_repository_trend_data(self, repository_data: Dict[int, List[Dict[str, Any]]], 
+                                      period: str = 'weekly') -> Dict[str, Any]:
+        """
+        Generate trend data for multiple repositories with combined and individual analysis.
+        
+        Args:
+            repository_data: Dictionary with repository_id as key and list of lead time data as value
+            period: Grouping period ('weekly' or 'monthly')
+            
+        Returns:
+            Dictionary containing combined and individual repository trend data
+            
+        Requirements addressed: 4.3
+        """
+        if not repository_data:
+            logger.info("No repository data provided for multi-repository trend analysis")
+            return {
+                'combined_trend': {},
+                'individual_trends': {},
+                'repository_summary': {},
+                'period_type': period
+            }
+        
+        result = {
+            'combined_trend': {},
+            'individual_trends': {},
+            'repository_summary': {},
+            'period_type': period
+        }
+        
+        # Calculate individual repository trends
+        for repo_id, lead_time_data in repository_data.items():
+            if not lead_time_data:
+                continue
+                
+            try:
+                # Get trend data for this repository
+                repo_trend = self.get_trend_data(lead_time_data, period)
+                
+                # Calculate trend statistics
+                trend_stats = self.calculate_trend_statistics(repo_trend['grouped_data'])
+                
+                # Add moving averages
+                enhanced_stats = self.calculate_moving_averages(trend_stats)
+                
+                result['individual_trends'][repo_id] = {
+                    'trend_data': repo_trend,
+                    'trend_statistics': enhanced_stats,
+                    'total_prs': len(lead_time_data),
+                    'total_periods': len(repo_trend['grouped_data'])
+                }
+                
+                # Calculate repository summary
+                all_lead_times = [pr['lead_time_hours'] for pr in lead_time_data]
+                if all_lead_times:
+                    result['repository_summary'][repo_id] = {
+                        'total_prs': len(all_lead_times),
+                        'average_lead_time': round(sum(all_lead_times) / len(all_lead_times), 2),
+                        'median_lead_time': round(sorted(all_lead_times)[len(all_lead_times) // 2], 2),
+                        'min_lead_time': round(min(all_lead_times), 2),
+                        'max_lead_time': round(max(all_lead_times), 2)
+                    }
+                
+            except Exception as e:
+                logger.error(f"Error processing repository {repo_id} trend data: {e}")
+                result['individual_trends'][repo_id] = {
+                    'error': str(e),
+                    'total_prs': len(lead_time_data) if lead_time_data else 0,
+                    'total_periods': 0
+                }
+        
+        # Calculate combined trend (all repositories together)
+        try:
+            all_lead_time_data = []
+            for repo_data in repository_data.values():
+                all_lead_time_data.extend(repo_data)
+            
+            if all_lead_time_data:
+                combined_trend_data = self.get_trend_data(all_lead_time_data, period)
+                combined_trend_stats = self.calculate_trend_statistics(combined_trend_data['grouped_data'])
+                enhanced_combined_stats = self.calculate_moving_averages(combined_trend_stats)
+                
+                result['combined_trend'] = {
+                    'trend_data': combined_trend_data,
+                    'trend_statistics': enhanced_combined_stats,
+                    'total_prs': len(all_lead_time_data),
+                    'total_periods': len(combined_trend_data['grouped_data']),
+                    'total_repositories': len([repo_id for repo_id, data in repository_data.items() if data])
+                }
+            
+        except Exception as e:
+            logger.error(f"Error calculating combined trend data: {e}")
+            result['combined_trend'] = {'error': str(e)}
+        
+        logger.info(f"Multi-repository trend analysis completed for {len(repository_data)} repositories")
+        return result
+    
+    def handle_empty_periods(self, trend_statistics: Dict[str, Dict[str, Any]], 
+                           period_type: str = 'weekly', 
+                           fill_gaps: bool = True) -> Dict[str, Dict[str, Any]]:
+        """
+        Handle periods with no pull requests by filling gaps or marking them appropriately.
+        
+        Args:
+            trend_statistics: Dictionary with period trend statistics
+            period_type: Type of period ('weekly' or 'monthly')
+            fill_gaps: Whether to fill empty periods with zero values
+            
+        Returns:
+            Enhanced trend statistics with empty periods handled
+            
+        Requirements addressed: 4.4
+        """
+        if not trend_statistics:
+            return trend_statistics
+        
+        periods = sorted(trend_statistics.keys())
+        if len(periods) < 2:
+            return trend_statistics
+        
+        # Generate all expected periods between first and last
+        first_period = periods[0]
+        last_period = periods[-1]
+        
+        try:
+            expected_periods = self._generate_period_range(first_period, last_period, period_type)
+        except Exception as e:
+            logger.warning(f"Could not generate period range: {e}")
+            return trend_statistics
+        
+        enhanced_statistics = {}
+        
+        for period in expected_periods:
+            if period in trend_statistics:
+                # Period has data
+                enhanced_statistics[period] = trend_statistics[period]
+            elif fill_gaps:
+                # Period has no data, fill with zeros
+                enhanced_statistics[period] = {
+                    'average': 0.0,
+                    'median': 0.0,
+                    'min': 0.0,
+                    'max': 0.0,
+                    'count': 0,
+                    'change_rate': 0.0,
+                    'trend_direction': 'no_data',
+                    'previous_period': None,
+                    'period_start': None,
+                    'period_end': None,
+                    'lead_times': [],
+                    'is_empty_period': True
+                }
+            # If fill_gaps is False, we skip empty periods
+        
+        # Recalculate change rates for filled periods
+        if fill_gaps:
+            enhanced_periods = sorted(enhanced_statistics.keys())
+            for i, period in enumerate(enhanced_periods):
+                if i > 0:
+                    prev_period = enhanced_periods[i-1]
+                    current_avg = enhanced_statistics[period]['average']
+                    prev_avg = enhanced_statistics[prev_period]['average']
+                    
+                    if prev_avg > 0:
+                        change_rate = ((current_avg - prev_avg) / prev_avg) * 100
+                        enhanced_statistics[period]['change_rate'] = round(change_rate, 2)
+                        # Only update trend direction if it's not already marked as no_data
+                        if not enhanced_statistics[period].get('is_empty_period', False):
+                            enhanced_statistics[period]['trend_direction'] = self._determine_trend_direction(change_rate)
+                    
+                    enhanced_statistics[period]['previous_period'] = prev_period
+        
+        logger.info(f"Empty periods handled: {len(enhanced_statistics)} total periods, {len(expected_periods) - len(periods)} gaps filled")
+        return enhanced_statistics
+    
+    def _generate_period_range(self, start_period: str, end_period: str, period_type: str) -> List[str]:
+        """
+        Generate a list of all periods between start and end periods.
+        
+        Args:
+            start_period: Starting period string
+            end_period: Ending period string
+            period_type: Type of period ('weekly' or 'monthly')
+            
+        Returns:
+            List of period strings
+        """
+        periods = []
+        
+        if period_type == 'weekly':
+            # Parse weekly periods (format: YYYY-WXX)
+            start_year, start_week = self._parse_weekly_period(start_period)
+            end_year, end_week = self._parse_weekly_period(end_period)
+            
+            current_year, current_week = start_year, start_week
+            
+            while (current_year, current_week) <= (end_year, end_week):
+                periods.append(f"{current_year}-W{current_week:02d}")
+                current_week += 1
+                if current_week > 52:  # Simplified - doesn't handle leap years perfectly
+                    current_week = 1
+                    current_year += 1
+                    
+        elif period_type == 'monthly':
+            # Parse monthly periods (format: YYYY-MM)
+            start_year, start_month = map(int, start_period.split('-'))
+            end_year, end_month = map(int, end_period.split('-'))
+            
+            current_year, current_month = start_year, start_month
+            
+            while (current_year, current_month) <= (end_year, end_month):
+                periods.append(f"{current_year}-{current_month:02d}")
+                current_month += 1
+                if current_month > 12:
+                    current_month = 1
+                    current_year += 1
+        
+        return periods
+    
+    def _parse_weekly_period(self, period_str: str) -> tuple:
+        """
+        Parse weekly period string to extract year and week number.
+        
+        Args:
+            period_str: Weekly period string (format: YYYY-WXX)
+            
+        Returns:
+            Tuple of (year, week_number)
+        """
+        try:
+            parts = period_str.split('-W')
+            year = int(parts[0])
+            week = int(parts[1])
+            return year, week
+        except (ValueError, IndexError) as e:
+            raise ValueError(f"Invalid weekly period format '{period_str}': {e}")

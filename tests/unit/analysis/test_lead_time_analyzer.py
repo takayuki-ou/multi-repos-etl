@@ -460,3 +460,209 @@ class TestLeadTimeAnalyzer:
         assert result['period_statistics'] == {}
         assert result['total_periods'] == 0
         assert result['total_prs'] == 0
+    
+    def test_calculate_trend_statistics(self):
+        """Test calculate_trend_statistics with multiple periods."""
+        # Create grouped data for multiple periods
+        grouped_data = {
+            '2024-01': [
+                {'lead_time_hours': 24.0, 'created_at': datetime(2024, 1, 15)},
+                {'lead_time_hours': 48.0, 'created_at': datetime(2024, 1, 20)}
+            ],
+            '2024-02': [
+                {'lead_time_hours': 36.0, 'created_at': datetime(2024, 2, 10)},
+                {'lead_time_hours': 60.0, 'created_at': datetime(2024, 2, 25)}
+            ],
+            '2024-03': [
+                {'lead_time_hours': 30.0, 'created_at': datetime(2024, 3, 5)}
+            ]
+        }
+        
+        result = self.analyzer.calculate_trend_statistics(grouped_data)
+        
+        # Check that all periods are present
+        assert '2024-01' in result
+        assert '2024-02' in result
+        assert '2024-03' in result
+        
+        # Check first period (no change rate)
+        period1 = result['2024-01']
+        assert period1['average'] == 36.0  # (24 + 48) / 2
+        assert period1['count'] == 2
+        assert period1['change_rate'] == 0.0
+        assert period1['trend_direction'] == 'stable'
+        
+        # Check second period (change rate calculation)
+        period2 = result['2024-02']
+        assert period2['average'] == 48.0  # (36 + 60) / 2
+        assert period2['count'] == 2
+        expected_change = ((48.0 - 36.0) / 36.0) * 100  # 33.33%
+        assert abs(period2['change_rate'] - expected_change) < 0.01
+        assert period2['trend_direction'] == 'worsening'
+        
+        # Check third period
+        period3 = result['2024-03']
+        assert period3['average'] == 30.0
+        assert period3['count'] == 1
+        expected_change = ((30.0 - 48.0) / 48.0) * 100  # -37.5%
+        assert abs(period3['change_rate'] - expected_change) < 0.01
+        assert period3['trend_direction'] == 'improving'
+    
+    def test_calculate_trend_statistics_empty_data(self):
+        """Test calculate_trend_statistics with empty data."""
+        result = self.analyzer.calculate_trend_statistics({})
+        assert result == {}
+    
+    def test_determine_trend_direction(self):
+        """Test _determine_trend_direction method."""
+        # Test improving trend (decrease in lead time)
+        assert self.analyzer._determine_trend_direction(-10.0) == 'improving'
+        assert self.analyzer._determine_trend_direction(-5.1) == 'improving'
+        
+        # Test worsening trend (increase in lead time)
+        assert self.analyzer._determine_trend_direction(10.0) == 'worsening'
+        assert self.analyzer._determine_trend_direction(5.1) == 'worsening'
+        
+        # Test stable trend
+        assert self.analyzer._determine_trend_direction(0.0) == 'stable'
+        assert self.analyzer._determine_trend_direction(2.0) == 'stable'
+        assert self.analyzer._determine_trend_direction(-3.0) == 'stable'
+        assert self.analyzer._determine_trend_direction(5.0) == 'stable'
+        assert self.analyzer._determine_trend_direction(-5.0) == 'stable'
+    
+    def test_calculate_moving_averages(self):
+        """Test calculate_moving_averages method."""
+        trend_data = {
+            '2024-01': {'average': 20.0},
+            '2024-02': {'average': 30.0},
+            '2024-03': {'average': 40.0},
+            '2024-04': {'average': 50.0},
+            '2024-05': {'average': 60.0}
+        }
+        
+        result = self.analyzer.calculate_moving_averages(trend_data, [3])
+        
+        # First two periods should have None for 3-period moving average
+        assert result['2024-01']['moving_avg_3'] is None
+        assert result['2024-02']['moving_avg_3'] is None
+        
+        # Third period should have moving average of first 3 periods
+        assert result['2024-03']['moving_avg_3'] == 30.0  # (20 + 30 + 40) / 3
+        assert result['2024-04']['moving_avg_3'] == 40.0  # (30 + 40 + 50) / 3
+        assert result['2024-05']['moving_avg_3'] == 50.0  # (40 + 50 + 60) / 3
+    
+    def test_get_multi_repository_trend_data(self):
+        """Test get_multi_repository_trend_data method."""
+        # Create sample data for multiple repositories
+        repo1_data = [
+            {
+                'lead_time_hours': 24.0,
+                'created_at': datetime(2024, 1, 15),
+                'pr_number': 1,
+                'repository_id': 1
+            },
+            {
+                'lead_time_hours': 48.0,
+                'created_at': datetime(2024, 2, 10),
+                'pr_number': 2,
+                'repository_id': 1
+            }
+        ]
+        
+        repo2_data = [
+            {
+                'lead_time_hours': 36.0,
+                'created_at': datetime(2024, 1, 20),
+                'pr_number': 3,
+                'repository_id': 2
+            }
+        ]
+        
+        repository_data = {1: repo1_data, 2: repo2_data}
+        
+        result = self.analyzer.get_multi_repository_trend_data(repository_data, 'monthly')
+        
+        # Check structure
+        assert 'combined_trend' in result
+        assert 'individual_trends' in result
+        assert 'repository_summary' in result
+        assert result['period_type'] == 'monthly'
+        
+        # Check individual trends
+        assert 1 in result['individual_trends']
+        assert 2 in result['individual_trends']
+        
+        # Check repository summary
+        assert 1 in result['repository_summary']
+        assert 2 in result['repository_summary']
+        assert result['repository_summary'][1]['total_prs'] == 2
+        assert result['repository_summary'][2]['total_prs'] == 1
+        
+        # Check combined trend
+        assert 'trend_data' in result['combined_trend']
+        assert result['combined_trend']['total_prs'] == 3
+        assert result['combined_trend']['total_repositories'] == 2
+    
+    def test_handle_empty_periods(self):
+        """Test handle_empty_periods method."""
+        trend_statistics = {
+            '2024-01': {'average': 30.0, 'count': 2},
+            '2024-03': {'average': 40.0, 'count': 1}  # Missing 2024-02
+        }
+        
+        result = self.analyzer.handle_empty_periods(trend_statistics, 'monthly', fill_gaps=True)
+        
+        # Should have all three periods
+        assert '2024-01' in result
+        assert '2024-02' in result
+        assert '2024-03' in result
+        
+        # Check filled period
+        assert result['2024-02']['average'] == 0.0
+        assert result['2024-02']['count'] == 0
+        assert result['2024-02']['trend_direction'] == 'no_data'
+        assert result['2024-02']['is_empty_period'] is True
+        
+        # Check that original data is preserved
+        assert result['2024-01']['average'] == 30.0
+        assert result['2024-03']['average'] == 40.0
+    
+    def test_handle_empty_periods_no_fill(self):
+        """Test handle_empty_periods with fill_gaps=False."""
+        trend_statistics = {
+            '2024-01': {'average': 30.0, 'count': 2},
+            '2024-03': {'average': 40.0, 'count': 1}
+        }
+        
+        result = self.analyzer.handle_empty_periods(trend_statistics, 'monthly', fill_gaps=False)
+        
+        # Should only have original periods
+        assert '2024-01' in result
+        assert '2024-02' not in result
+        assert '2024-03' in result
+        
+        # Original data should be preserved
+        assert result['2024-01']['average'] == 30.0
+        assert result['2024-03']['average'] == 40.0
+    
+    def test_parse_weekly_period(self):
+        """Test _parse_weekly_period method."""
+        year, week = self.analyzer._parse_weekly_period('2024-W15')
+        assert year == 2024
+        assert week == 15
+        
+        # Test invalid format
+        with pytest.raises(ValueError):
+            self.analyzer._parse_weekly_period('invalid-format')
+    
+    def test_generate_period_range_monthly(self):
+        """Test _generate_period_range for monthly periods."""
+        periods = self.analyzer._generate_period_range('2024-01', '2024-03', 'monthly')
+        expected = ['2024-01', '2024-02', '2024-03']
+        assert periods == expected
+    
+    def test_generate_period_range_weekly(self):
+        """Test _generate_period_range for weekly periods."""
+        periods = self.analyzer._generate_period_range('2024-W01', '2024-W03', 'weekly')
+        expected = ['2024-W01', '2024-W02', '2024-W03']
+        assert periods == expected
