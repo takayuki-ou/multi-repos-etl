@@ -10,6 +10,9 @@ from datetime import datetime
 from typing import Any
 from src.db.models import Base
 
+# --- ここでmodelsをimportしてBase.metadataにテーブル定義を登録 ---
+from . import models
+
 # ロギングの設定
 logger = logging.getLogger(__name__)
 
