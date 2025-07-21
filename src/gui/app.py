@@ -166,7 +166,7 @@ def display_pr_details(selected_pr_data: Dict[str, Any], data_manager: DataManag
         st.info("No review comments found for this PR.")
 
 
-def display_lead_time_filters(data_manager: DataManager, repo_id: int) -> Tuple[Optional[datetime], Optional[datetime], Optional[str], bool]:
+def display_lead_time_filters(data_manager: DataManager, repo_id: int) -> Tuple[Optional[datetime], Optional[datetime], Optional[str], Optional[str], bool]:
     """
     Display filter UI components for lead time analysis.
     
@@ -175,7 +175,7 @@ def display_lead_time_filters(data_manager: DataManager, repo_id: int) -> Tuple[
         repo_id: Repository ID
         
     Returns:
-        Tuple of (start_date, end_date, author, filters_applied)
+        Tuple of (start_date, end_date, author, status, filters_applied)
         
     Requirements addressed: 3.1, 3.2, 3.3
     """
@@ -202,6 +202,19 @@ def display_lead_time_filters(data_manager: DataManager, repo_id: int) -> Tuple[
             )
             
         with col3:
+            st.markdown("**Status**")
+            status_options = ["All Status", "open", "closed"]
+            selected_status = st.selectbox(
+                "Select Status",
+                options=status_options,
+                help="Filter PRs by status (open/closed)",
+                key="lead_time_status_select"
+            )
+        
+        # Second row: Author
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
             st.markdown("**Author**")
             # Get available authors for this repository
             authors, author_error = data_manager.get_authors_for_repository(repo_id)
@@ -242,21 +255,22 @@ def display_lead_time_filters(data_manager: DataManager, repo_id: int) -> Tuple[
         if end_date:
             end_datetime = datetime.combine(end_date, datetime.max.time())
         
-        # Convert author selection
+        # Convert selections
         author_filter = None if selected_author == "All Authors" else selected_author
+        status_filter = None if selected_status == "All Status" else selected_status
         
         # Validate filter combination
-        if apply_filters and (start_datetime or end_datetime or author_filter):
+        if apply_filters and (start_datetime or end_datetime or author_filter or status_filter):
             is_valid, validation_error = data_manager.validate_filter_combination(
-                start_datetime, end_datetime, author_filter
+                start_datetime, end_datetime, author_filter, status_filter
             )
             
             if not is_valid:
                 st.error(f"Filter validation error: {validation_error}")
-                return None, None, None, False
+                return None, None, None, None, False
         
         # Show active filters summary
-        if apply_filters and (start_datetime or end_datetime or author_filter):
+        if apply_filters and (start_datetime or end_datetime or author_filter or status_filter):
             active_filters = []
             if start_datetime:
                 active_filters.append(f"Start: {start_date}")
@@ -264,11 +278,13 @@ def display_lead_time_filters(data_manager: DataManager, repo_id: int) -> Tuple[
                 active_filters.append(f"End: {end_date}")
             if author_filter:
                 active_filters.append(f"Author: {author_filter}")
+            if status_filter:
+                active_filters.append(f"Status: {status_filter}")
             
             if active_filters:
                 st.info(f"Active filters: {' | '.join(active_filters)}")
         
-        return start_datetime, end_datetime, author_filter, apply_filters
+        return start_datetime, end_datetime, author_filter, status_filter, apply_filters
 
 
 def display_lead_time_analysis(data_manager: DataManager, selected_repo_data: Dict[str, Any]):
@@ -295,14 +311,14 @@ def display_lead_time_analysis(data_manager: DataManager, selected_repo_data: Di
         analyzer = LeadTimeAnalyzer(data_manager)
         
         # Display filter UI
-        start_date, end_date, author, filters_applied = display_lead_time_filters(data_manager, repo_id)
+        start_date, end_date, author, status, filters_applied = display_lead_time_filters(data_manager, repo_id)
         
         # Get pull requests based on filters
-        if filters_applied and (start_date or end_date or author):
+        if filters_applied and (start_date or end_date or author or status):
             # Use filtered data
             with st.spinner("Loading filtered pull requests..."):
                 all_pull_requests, pr_error_msg = data_manager.get_pull_requests_with_lead_time_data(
-                    repo_id, start_date, end_date, author
+                    repo_id, start_date, end_date, author, status
                 )
         else:
             # Use all pull requests
@@ -313,7 +329,7 @@ def display_lead_time_analysis(data_manager: DataManager, selected_repo_data: Di
             return
             
         if not all_pull_requests:
-            if filters_applied and (start_date or end_date or author):
+            if filters_applied and (start_date or end_date or author or status):
                 st.info("No pull requests match the current filter criteria.")
             else:
                 st.info(f"No pull requests found for {repo_name}.")
