@@ -58,6 +58,7 @@ class TestDatabase:
         yield db
         # tmp_path should handle cleanup of the db file
 
+    @pytest.mark.usefixtures('database')
     def test_init_creates_directory(self, db_path: str) -> None:
         """__init__ がデータベースファイル用のディレクトリを作成することを確認"""
         db_dir = os.path.dirname(db_path)
@@ -70,6 +71,7 @@ class TestDatabase:
         # ディレクトリが作成されたことを確認
         assert os.path.exists(db_dir)
 
+    @pytest.mark.usefixtures('database')
     def test_create_engine_success(self, database: Database, db_path: str) -> None:
         """SQLite用エンジン作成の成功テスト"""
         assert database.engine is not None
@@ -80,6 +82,7 @@ class TestDatabase:
         assert str(database.engine.url).endswith(os.path.basename(db_path))
         assert str(database.engine.url).startswith("sqlite:///")
 
+    @pytest.mark.usefixtures('database')
     def test_create_engine_default_path(self, tmp_path: Path) -> None:
         """db_pathがconfigにない場合にデフォルトパスでエンジンが作成されるかテスト"""
         # デフォルトパスの親ディレクトリを作成しておく（必要ない場合もある）
@@ -105,6 +108,7 @@ class TestDatabase:
             # tryブロックでファイルが作成された場合に備えて削除
             pass
 
+    @pytest.mark.usefixtures('database')
     def test_get_session(self, database: Database) -> None:
         """セッション取得のテスト"""
         with database.get_session() as session:
@@ -117,6 +121,7 @@ class TestDatabase:
             from sqlalchemy import text
             session.execute(text("SELECT 1"))
 
+    @pytest.mark.usefixtures('database')
     def test_get_session_rollback(self, database: Database, mocker: Any) -> None:
         """セッションロールバックのテスト"""
         # SQLAlchemyErrorを発生させるモックを設定
@@ -142,6 +147,7 @@ class TestDatabase:
         # クローズが呼び出されたか確認
         mock_session.close.assert_called_once()
 
+    @pytest.mark.usefixtures('database')
     def test_create_tables(self, database: Database, mocker: Any, db_config: Dict[str, str]) -> None:
         """テーブル作成のテスト（ORMモデルがBase.metadataに登録されていることも確認）"""
         # Base.metadata.create_all が呼ばれることを確認
@@ -158,6 +164,7 @@ class TestDatabase:
         db_instance_for_mock_test.create_tables()
         mock_metadata.create_all.assert_called_once_with(db_instance_for_mock_test.engine)
 
+    @pytest.mark.usefixtures('database')
     def test_create_tables_creates_all_tables(self, tmp_path):
         """ORM定義に基づき全テーブルが作成されることをテスト"""
         db_path = tmp_path / "test_create_tables.db"
@@ -184,10 +191,12 @@ class TestDatabase:
 
     # --- Tests for data retrieval methods ---
 
+    @pytest.mark.usefixtures('database')
     def test_get_repository_list_empty(self, database: Database) -> None:
         """データベースが空の場合に空のリストを返すことをテスト"""
         assert database.get_repository_list() == []
 
+    @pytest.mark.usefixtures('database')
     def test_get_repository_list_with_data(self, database: Database) -> None:
         """データが存在する場合にリポジトリリストを正しく返すことをテスト"""
         now_str = datetime.now(timezone.utc).isoformat()
@@ -209,6 +218,7 @@ class TestDatabase:
         assert {'id': 1, 'owner_login': 'owner1', 'name': 'repo1', 'url': 'url1'} in result
         assert {'id': 2, 'owner_login': 'owner2', 'name': 'repo2', 'url': 'url2'} in result
 
+    @pytest.mark.usefixtures('database')
     def test_get_pull_requests_no_prs(self, database: Database) -> None:
         """リポジトリにPRがない場合に空のリストを返すことをテスト"""
         now_str = datetime.now(timezone.utc).isoformat()
@@ -220,6 +230,7 @@ class TestDatabase:
             session.commit()
         assert database.get_pull_requests_for_repository(repository_id=1) == []
 
+    @pytest.mark.usefixtures('database')
     def test_get_pull_requests_with_data(self, database: Database) -> None:
         """リポジトリにPRがある場合に正しくPRリストを返すことをテスト"""
         now_str = datetime.now(timezone.utc).isoformat()
@@ -254,10 +265,12 @@ class TestDatabase:
         assert result_set == expected_set
 
 
+    @pytest.mark.usefixtures('database')
     def test_get_pull_requests_non_existent_repo(self, database: Database) -> None:
         """存在しないリポジトリIDの場合に空のリストを返すことをテスト"""
         assert database.get_pull_requests_for_repository(repository_id=99999) == []
 
+    @pytest.mark.usefixtures('database')
     def test_get_review_comments_no_comments(self, database: Database) -> None:
         """PRにコメントがない場合に空のリストを返すことをテスト"""
         now_str = datetime.now(timezone.utc).isoformat()
@@ -271,6 +284,7 @@ class TestDatabase:
             session.commit()
         assert database.get_review_comments_for_pr(pull_request_id=201) == []
 
+    @pytest.mark.usefixtures('database')
     def test_get_review_comments_with_data(self, database: Database) -> None:
         """PRにコメントがある場合に正しくコメントリストを返すことをテスト"""
         now_str = datetime.now(timezone.utc).isoformat()
@@ -306,6 +320,7 @@ class TestDatabase:
         assert result_set == expected_set
 
 
+    @pytest.mark.usefixtures('database')
     def test_get_review_comments_non_existent_pr(self, database: Database) -> None:
         """存在しないPR IDの場合に空のリストを返すことをテスト"""
         assert database.get_review_comments_for_pr(pull_request_id=88888) == []
