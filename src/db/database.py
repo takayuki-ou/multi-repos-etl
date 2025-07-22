@@ -2,53 +2,30 @@
 データベース接続とセッション管理を行うモジュール
 """
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker, scoped_session
+from sqlalchemy.orm import sessionmaker, scoped_session, declarative_base
 from contextlib import contextmanager
 import logging
 import os
 from datetime import datetime
 from typing import Any
-from src.db.models import Base
-
-# --- ここでmodelsをimportしてBase.metadataにテーブル定義を登録 ---
 from . import models
 
 # ロギングの設定
 logger = logging.getLogger(__name__)
 
-# ベースクラスの作成
+# SQLite DB用ディレクトリの作成
+if not os.path.exists('data'):
+    os.mkdir('data')
+
+default_db_path: str = 'data/github_data.db'
 
 class Database:
     def __init__(self, config: dict[str, str]):
         """データベース接続の初期化"""
-        # Store the original config if needed elsewhere, but avoid modifying it.
-        # self.config = config
-
         # db_path を取得（なければデフォルト値）
-        # Use .get from the original config for safety.
-        db_path_from_config: str = config.get('db_path', 'github_data.db')
-        self.resolved_db_path: str = db_path_from_config # Store resolved path separately
-
-        # SQLiteファイルが格納されるディレクトリが存在しない場合は作成する
-        # Use self.resolved_db_path for directory creation and engine
-        db_dir: str = os.path.dirname(self.resolved_db_path)
-        if db_dir and not os.path.exists(db_dir):
-            os.makedirs(db_dir)
-            logger.info(f"データベースディレクトリを作成しました: {db_dir}")
-        self.engine = self._create_engine()
+        db_path: str = config.get('db_path', default_db_path)
+        self.engine = create_engine(f"sqlite:///{db_path}")
         self.session_factory = scoped_session(sessionmaker(bind=self.engine))
-
-    def _create_engine(self):
-        """SQLAlchemyエンジンの作成"""
-        try:
-            # SQLiteの接続文字列を使用
-            # Use the resolved_db_path attribute
-            connection_string = f"sqlite:///{self.resolved_db_path}"
-            logger.info(f"データベースに接続します: {connection_string}")
-            return create_engine(connection_string)
-        except Exception as e:
-            logger.error(f"データベースエンジンの作成に失敗しました: {e}")
-            raise
 
     @contextmanager
     def get_session(self):
@@ -66,17 +43,12 @@ class Database:
 
     def create_tables(self):
         """テーブルの作成"""
-        try:
-            Base.metadata.create_all(self.engine)
-            logger.info("テーブルの作成が完了しました")
-        except Exception as e:
-            logger.error(f"テーブルの作成に失敗しました: {e}")
-            raise
-
+        models.Base.metadata.create_all(self.engine)
+  
     def drop_tables(self):
         """テーブルの削除"""
         try:
-            Base.metadata.drop_all(self.engine)
+            models.Base.metadata.drop_all(self.engine)
             logger.info("テーブルの削除が完了しました")
         except Exception as e:
             logger.error(f"テーブルの削除に失敗しました: {e}")

@@ -1,6 +1,8 @@
 from sqlalchemy import Column, Integer, String, Text, ForeignKey
-from sqlalchemy.orm import relationship
-from .database import Base
+from sqlalchemy.orm import relationship, declarative_base
+
+# ORMのベースとなるクラスの定義
+Base = declarative_base()
 
 class Repository(Base):
     __tablename__ = 'repositories'
