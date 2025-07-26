@@ -1,6 +1,13 @@
 import sqlite3
 import os
-from .data.sample_data import SAMPLE_PRS, SAMPLE_COMMENTS
+import sys
+
+# プロジェクトルートをsys.pathに追加
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+from tests.integration.db.data.sample_data import SAMPLE_PRS, SAMPLE_COMMENTS
 
 # プロジェクトルートからの相対パスでschema.sqlを指定
 SCHEMA_PATH = os.path.join(os.path.dirname(__file__), '../../../src/db/schema.sql')

@@ -27,3 +27,7 @@ logs/
 .DS_Store
 Thumbs.db 
 data/github_analysis.db
+.kiro/specs/review-lead-time-analysis/design.md
+.kiro/specs/review-lead-time-analysis/requirements.md
+.kiro/specs/review-lead-time-analysis/tasks.md
+.cursor/rules/project-wide-rules.mdc

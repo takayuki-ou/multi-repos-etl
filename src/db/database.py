@@ -2,53 +2,30 @@
 データベース接続とセッション管理を行うモジュール
 """
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker, scoped_session
+from sqlalchemy.orm import sessionmaker, scoped_session, declarative_base
 from contextlib import contextmanager
 import logging
 import os
 from datetime import datetime
 from typing import Any
-from src.db.models import Base
-
-# --- ここでmodelsをimportしてBase.metadataにテーブル定義を登録 ---
 from . import models
 
 # ロギングの設定
 logger = logging.getLogger(__name__)
 
-# ベースクラスの作成
+# SQLite DB用ディレクトリの作成
+if not os.path.exists('data'):
+    os.mkdir('data')
+
+default_db_path: str = 'data/github_data.db'
 
 class Database:
     def __init__(self, config: dict[str, str]):
         """データベース接続の初期化"""
-        # Store the original config if needed elsewhere, but avoid modifying it.
-        # self.config = config
-
         # db_path を取得（なければデフォルト値）
-        # Use .get from the original config for safety.
-        db_path_from_config: str = config.get('db_path', 'github_data.db')
-        self.resolved_db_path: str = db_path_from_config # Store resolved path separately
-
-        # SQLiteファイルが格納されるディレクトリが存在しない場合は作成する
-        # Use self.resolved_db_path for directory creation and engine
-        db_dir: str = os.path.dirname(self.resolved_db_path)
-        if db_dir and not os.path.exists(db_dir):
-            os.makedirs(db_dir)
-            logger.info(f"データベースディレクトリを作成しました: {db_dir}")
-        self.engine = self._create_engine()
+        db_path: str = config.get('db_path', default_db_path)
+        self.engine = create_engine(f"sqlite:///{db_path}")
         self.session_factory = scoped_session(sessionmaker(bind=self.engine))
-
-    def _create_engine(self):
-        """SQLAlchemyエンジンの作成"""
-        try:
-            # SQLiteの接続文字列を使用
-            # Use the resolved_db_path attribute
-            connection_string = f"sqlite:///{self.resolved_db_path}"
-            logger.info(f"データベースに接続します: {connection_string}")
-            return create_engine(connection_string)
-        except Exception as e:
-            logger.error(f"データベースエンジンの作成に失敗しました: {e}")
-            raise
 
     @contextmanager
     def get_session(self):
@@ -66,17 +43,12 @@ class Database:
 
     def create_tables(self):
         """テーブルの作成"""
-        try:
-            Base.metadata.create_all(self.engine)
-            logger.info("テーブルの作成が完了しました")
-        except Exception as e:
-            logger.error(f"テーブルの作成に失敗しました: {e}")
-            raise
-
+        models.Base.metadata.create_all(self.engine)
+  
     def drop_tables(self):
         """テーブルの削除"""
         try:
-            Base.metadata.drop_all(self.engine)
+            models.Base.metadata.drop_all(self.engine)
             logger.info("テーブルの削除が完了しました")
         except Exception as e:
             logger.error(f"テーブルの削除に失敗しました: {e}")
@@ -425,6 +397,136 @@ class Database:
         except Exception as e:
             logger.error(f"リポジトリ取得中にエラーが発生しました: {e}")
             return None
+
+    def get_pull_requests_with_filters(self, repository_id: int, 
+                                     start_date: datetime = None,
+                                     end_date: datetime = None,
+                                     author: str = None,
+                                     status: str = None) -> list[dict[str, Any]]:
+        """
+        フィルタリング条件に基づいてプルリクエストを取得します。
+        複数のフィルタはANDロジックで組み合わせられます。
+        
+        Args:
+            repository_id (int): リポジトリID
+            start_date (datetime, optional): 開始日（PR作成日でフィルタ）
+            end_date (datetime, optional): 終了日（PR作成日でフィルタ）
+            author (str, optional): 作成者でフィルタ
+            status (str, optional): PRステータスでフィルタ（例: 'closed', 'open', 'merged'）
+            
+        Returns:
+            list[dict]: フィルタされたプルリクエスト情報のリスト
+        """
+        logger.info(f"フィルタ付きプルリクエスト取得開始 - リポジトリID: {repository_id}")
+        
+        # フィルタ条件の検証
+        if start_date and end_date and start_date > end_date:
+            logger.warning("開始日が終了日より後に設定されています")
+            return []
+        
+        try:
+            with self.get_session() as session:
+                # ベースクエリ
+                query_parts = ["""
+                    SELECT id, number, title, user_login, state, created_at, updated_at, 
+                           closed_at, merged_at, url, body
+                    FROM pull_requests
+                    WHERE repository_id = :repo_id
+                """]
+                
+                params = {"repo_id": repository_id}
+                filter_descriptions = []
+                
+                # 日付範囲フィルタ（ANDロジック）
+                if start_date:
+                    query_parts.append("AND created_at >= :start_date")
+                    params["start_date"] = start_date.isoformat()
+                    filter_descriptions.append(f"開始日 >= {start_date.strftime('%Y-%m-%d')}")
+                    
+                if end_date:
+                    query_parts.append("AND created_at <= :end_date")
+                    params["end_date"] = end_date.isoformat()
+                    filter_descriptions.append(f"終了日 <= {end_date.strftime('%Y-%m-%d')}")
+                
+                # 作成者フィルタ（ANDロジック）
+                if author:
+                    query_parts.append("AND user_login = :author")
+                    params["author"] = author
+                    filter_descriptions.append(f"作成者 = {author}")
+                
+                # ステータスフィルタ（ANDロジック）
+                if status:
+                    query_parts.append("AND state = :status")
+                    params["status"] = status
+                    filter_descriptions.append(f"ステータス = {status}")
+                
+                query_parts.append("ORDER BY created_at DESC")
+                
+                final_query = " ".join(query_parts)
+                
+                # フィルタ条件をログに記録
+                if filter_descriptions:
+                    logger.info(f"適用されるフィルタ条件（ANDロジック）: {' AND '.join(filter_descriptions)}")
+                
+                result = session.execute(text(final_query), params)
+                
+                pull_requests = [
+                    {
+                        "id": row.id,
+                        "number": row.number,
+                        "title": row.title,
+                        "user_login": row.user_login,
+                        "state": row.state,
+                        "created_at": row.created_at,
+                        "updated_at": row.updated_at,
+                        "closed_at": row.closed_at,
+                        "merged_at": row.merged_at,
+                        "url": row.url,
+                        "body": row.body
+                    } for row in result
+                ]
+                
+                logger.info(f"{len(pull_requests)}件のフィルタされたプルリクエストを取得しました")
+                
+                # 結果が空の場合の詳細ログ
+                if not pull_requests and filter_descriptions:
+                    logger.info(f"フィルタ条件に一致するPRが見つかりませんでした: {' AND '.join(filter_descriptions)}")
+                
+                return pull_requests
+                
+        except Exception as e:
+            logger.error(f"フィルタ付きプルリクエストの取得中にエラーが発生しました: {e}")
+            return []
+
+    def get_authors_for_repository(self, repository_id: int) -> list[str]:
+        """
+        指定されたリポジトリの作成者一覧を取得します。
+        
+        Args:
+            repository_id (int): リポジトリID
+            
+        Returns:
+            list[str]: 作成者のリスト
+        """
+        logger.info(f"リポジトリID {repository_id} の作成者一覧取得を開始します")
+        
+        try:
+            with self.get_session() as session:
+                query = text("""
+                    SELECT DISTINCT user_login
+                    FROM pull_requests
+                    WHERE repository_id = :repo_id
+                    ORDER BY user_login
+                """)
+                result = session.execute(query, {"repo_id": repository_id})
+                
+                authors = [row.user_login for row in result]
+                logger.info(f"{len(authors)}人の作成者を取得しました")
+                return authors
+                
+        except Exception as e:
+            logger.error(f"作成者一覧の取得中にエラーが発生しました: {e}")
+            return []
 
     def get_pull_request_by_number(self, repository_id: int, number: int) -> dict[str, Any] | None:
         """
